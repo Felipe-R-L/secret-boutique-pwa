@@ -3,18 +3,22 @@
 import Image from "next/image";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { products } from "@/lib/data/products";
 import { Product } from "@/lib/store/cart-store";
 import { getPrimaryProductImage } from "@/lib/product-images";
 
 interface HeroSectionProps {
   onProductSelect: (product: Product) => void;
+  featuredProducts: Product[];
+  heroTitle: string;
+  heroSubtitle: string;
 }
 
-export function HeroSection({ onProductSelect }: HeroSectionProps) {
-  const featuredProducts = products
-    .filter((p) => p.category === "destaques")
-    .slice(0, 3);
+export function HeroSection({
+  onProductSelect,
+  featuredProducts,
+  heroTitle,
+  heroSubtitle,
+}: HeroSectionProps) {
   const heroProduct = featuredProducts[0];
 
   return (
@@ -33,16 +37,14 @@ export function HeroSection({ onProductSelect }: HeroSectionProps) {
               </div>
 
               <h1 className="font-sans text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl lg:text-5xl xl:text-6xl text-balance">
-                Descubra o prazer do{" "}
-                <span className="text-muted-foreground">autocuidado</span>
+                {heroTitle}
               </h1>
 
               <p
                 className="max-w-lg text-base leading-relaxed text-muted-foreground md:text-lg lg:text-xl"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
-                Produtos premium selecionados para transformar seus momentos
-                especiais em experiencias inesqueciveis.
+                {heroSubtitle}
               </p>
             </div>
 

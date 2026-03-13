@@ -9,13 +9,16 @@ export interface Product {
   name: string;
   price: number;
   description: string;
-  image: string;
+  image?: string;
+  image_url?: string | null;
   images?: string[];
-  category: "destaques" | "massagem" | "brinquedos";
+  category: string;
   specs?: ProductSpecs;
   rating?: number;
   reviews?: number;
   inStock?: boolean;
+  in_stock?: boolean;
+  is_featured?: boolean;
 }
 
 export interface CartItem {

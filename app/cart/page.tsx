@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ShoppingBag, CheckCircle } from "lucide-react";
+import { ArrowLeft, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PanicButton } from "@/components/panic-button";
 import { CartItem } from "@/components/cart-item";
@@ -10,30 +9,7 @@ import { CheckoutForm } from "@/components/checkout-form";
 import { useCartStore } from "@/lib/store/cart-store";
 
 export default function CartPage() {
-  const [orderComplete, setOrderComplete] = useState(false);
   const items = useCartStore((state) => state.items);
-
-  if (orderComplete) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-        <PanicButton />
-        <div className="text-center space-y-4">
-          <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-primary/10">
-            <CheckCircle className="size-8 text-primary" />
-          </div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Pedido Confirmado!
-          </h1>
-          <p className="text-muted-foreground">
-            Seu pedido foi recebido e sera preparado em instantes.
-          </p>
-          <Button asChild className="mt-4">
-            <Link href="/">Voltar ao Catalogo</Link>
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -74,7 +50,11 @@ export default function CartPage() {
               ))}
             </div>
 
-            <CheckoutForm onSuccess={() => setOrderComplete(true)} />
+            <CheckoutForm
+              onSuccess={() => {
+                // handled by checkout form navigation
+              }}
+            />
           </div>
         )}
       </main>

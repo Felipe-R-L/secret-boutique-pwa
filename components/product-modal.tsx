@@ -32,11 +32,11 @@ import {
   type CarouselApi,
 } from "@/components/ui/carousel";
 import { useCartStore, Product } from "@/lib/store/cart-store";
-import { getRelatedProducts } from "@/lib/data/products";
 import { getPrimaryProductImage, getProductImages } from "@/lib/product-images";
 
 interface ProductModalProps {
   product: Product | null;
+  relatedProducts?: Product[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRelatedProductSelect?: (product: Product) => void;
@@ -44,6 +44,7 @@ interface ProductModalProps {
 
 export function ProductModal({
   product,
+  relatedProducts = [],
   open,
   onOpenChange,
   onRelatedProductSelect,
@@ -178,8 +179,6 @@ export function ProductModal({
       currency: "BRL",
     }).format(price);
   };
-
-  const relatedProducts = product ? getRelatedProducts(product.id, 4) : [];
 
   if (!product) return null;
 
