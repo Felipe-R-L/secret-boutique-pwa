@@ -22,10 +22,12 @@ export type AdminProductCard = {
   name: string;
   price: number;
   description: string;
+  curatorship?: string;
   category: string;
   inStock: boolean;
   isFeatured: boolean;
   imageUrl?: string;
+  imageUrls?: string[];
   specs: Array<{ key: string; value: string }>;
 };
 
@@ -261,9 +263,11 @@ export function ProductsAdminPanel({
                         price: product.price,
                         category: product.category,
                         description: product.description,
+                        curatorship: product.curatorship ?? "",
                         inStock: product.inStock,
                         isFeatured: product.isFeatured,
                         imageUrl: product.imageUrl,
+                        imageUrls: product.imageUrls,
                         specs: product.specs,
                       }}
                       onSaved={() => setEditingProductId(null)}

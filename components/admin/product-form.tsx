@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Image from "next/image";
+import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,9 +20,11 @@ type ProductFormValue = {
   price: number;
   category: string;
   description: string;
+  curatorship?: string;
   inStock: boolean;
   isFeatured: boolean;
   imageUrl?: string;
+  imageUrls?: string[];
   specs: SpecItem[];
 };
 
@@ -62,6 +66,9 @@ export function ProductForm({
   const [description, setDescription] = useState(
     initialValue?.description ?? "",
   );
+  const [curatorship, setCuratorship] = useState(
+    initialValue?.curatorship ?? "",
+  );
   const [isFeatured, setIsFeatured] = useState(
     initialValue?.isFeatured ?? false,
   );
@@ -69,13 +76,36 @@ export function ProductForm({
   const [specs, setSpecs] = useState<SpecItem[]>(
     initialValue?.specs?.length ? initialValue.specs : [emptySpec()],
   );
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [keptExistingImageUrls, setKeptExistingImageUrls] = useState<string[]>(
+    initialValue?.imageUrls?.length
+      ? initialValue.imageUrls.filter(Boolean)
+      : initialValue?.imageUrl
+        ? [initialValue.imageUrl]
+        : [],
+  );
   const [message, setMessage] = useState("");
 
-  const existingImageUrl = useMemo(
-    () => initialValue?.imageUrl,
-    [initialValue?.imageUrl],
+  const previewUrls = useMemo(
+    () => imageFiles.map((file) => URL.createObjectURL(file)),
+    [imageFiles],
   );
+
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [previewUrls]);
+
+  const removeExistingImage = (url: string) => {
+    setKeptExistingImageUrls((prev) => prev.filter((item) => item !== url));
+  };
+
+  const removeNewImage = (index: number) => {
+    setImageFiles((prev) =>
+      prev.filter((_, currentIndex) => currentIndex !== index),
+    );
+  };
 
   const addSpec = () => setSpecs((prev) => [...prev, emptySpec()]);
 
@@ -100,33 +130,42 @@ export function ProductForm({
     setMessage("");
 
     startTransition(async () => {
-      let publicImageUrl = existingImageUrl;
+      let resolvedImageUrls =
+        keptExistingImageUrls.length > 0 ? [...keptExistingImageUrls] : [];
 
-      if (imageFile) {
+      if (imageFiles.length > 0) {
         const supabase = createClient();
-        const path = toStoragePath(name || "produto", imageFile.name);
+        const uploadedUrls: string[] = [];
 
-        const { error: uploadError } = await supabase.storage
-          .from("products")
-          .upload(path, imageFile, {
-            upsert: false,
-            contentType: imageFile.type || "application/octet-stream",
-          });
+        for (const file of imageFiles) {
+          const path = toStoragePath(name || "produto", file.name);
 
-        if (uploadError) {
-          if (uploadError.message.toLowerCase().includes("bucket not found")) {
-            setMessage(
-              "Erro no upload: bucket 'products' nao encontrado. Rode a migration scripts/004_storage_products_bucket.sql no Supabase SQL Editor.",
-            );
+          const { error: uploadError } = await supabase.storage
+            .from("products")
+            .upload(path, file, {
+              upsert: false,
+              contentType: file.type || "application/octet-stream",
+            });
+
+          if (uploadError) {
+            if (
+              uploadError.message.toLowerCase().includes("bucket not found")
+            ) {
+              setMessage(
+                "Erro no upload: bucket 'products' nao encontrado. Rode a migration scripts/004_storage_products_bucket.sql no Supabase SQL Editor.",
+              );
+              return;
+            }
+
+            setMessage(`Erro no upload da imagem: ${uploadError.message}`);
             return;
           }
 
-          setMessage(`Erro no upload da imagem: ${uploadError.message}`);
-          return;
+          const { data } = supabase.storage.from("products").getPublicUrl(path);
+          uploadedUrls.push(data.publicUrl);
         }
 
-        const { data } = supabase.storage.from("products").getPublicUrl(path);
-        publicImageUrl = data.publicUrl;
+        resolvedImageUrls = [...keptExistingImageUrls, ...uploadedUrls];
       }
 
       const sanitizedSpecs = specs
@@ -139,9 +178,11 @@ export function ProductForm({
         price,
         category,
         description,
+        curatorship,
         isFeatured,
         inStock,
-        imageUrl: publicImageUrl,
+        imageUrl: resolvedImageUrls[0],
+        imageUrls: resolvedImageUrls,
         specs: sanitizedSpecs,
       });
 
@@ -161,7 +202,9 @@ export function ProductForm({
         setPrice("");
         setCategory("");
         setDescription("");
-        setImageFile(null);
+        setCuratorship("");
+        setImageFiles([]);
+        setKeptExistingImageUrls([]);
         setIsFeatured(false);
         setInStock(true);
         setSpecs([emptySpec()]);
@@ -203,9 +246,82 @@ export function ProductForm({
         <Input
           type="file"
           accept="image/*"
-          onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
+          multiple
+          onChange={(event) =>
+            setImageFiles(Array.from(event.target.files ?? []))
+          }
         />
       </div>
+
+      {(imageFiles.length > 0 || keptExistingImageUrls.length > 0) && (
+        <p className="text-xs text-muted-foreground">
+          {imageFiles.length > 0
+            ? `${imageFiles.length} imagem(ns) selecionada(s) para upload no bucket 'products'.`
+            : `${keptExistingImageUrls.length} imagem(ns) ja vinculada(s) a este produto.`}
+        </p>
+      )}
+
+      {keptExistingImageUrls.length > 0 && (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Imagens atuais
+          </p>
+          <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+            {keptExistingImageUrls.map((url) => (
+              <div
+                key={url}
+                className="relative aspect-square overflow-hidden rounded-md border border-border"
+              >
+                <Image
+                  src={url}
+                  alt="Imagem atual"
+                  fill
+                  className="object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeExistingImage(url)}
+                  className="absolute right-1 top-1 inline-flex size-6 items-center justify-center rounded-full bg-black/60 text-white"
+                  aria-label="Remover imagem atual"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {previewUrls.length > 0 && (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Novas imagens selecionadas
+          </p>
+          <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+            {previewUrls.map((url, index) => (
+              <div
+                key={`${url}-${index}`}
+                className="relative aspect-square overflow-hidden rounded-md border border-border"
+              >
+                <Image
+                  src={url}
+                  alt="Nova imagem"
+                  fill
+                  className="object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeNewImage(index)}
+                  className="absolute right-1 top-1 inline-flex size-6 items-center justify-center rounded-full bg-black/60 text-white"
+                  aria-label="Remover imagem selecionada"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {categories.length > 0 && (
         <datalist id="product-category-options">
@@ -221,6 +337,13 @@ export function ProductForm({
         placeholder="Descricao"
         className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2"
         required
+      />
+
+      <textarea
+        value={curatorship}
+        onChange={(event) => setCuratorship(event.target.value)}
+        placeholder="Curadoria da Loja (analise tecnica, sensorial e recomendacoes)"
+        className="min-h-28 w-full rounded-md border border-amber-200 bg-amber-50/40 px-3 py-2 text-sm"
       />
 
       <div className="space-y-2 rounded-lg border border-border p-3">

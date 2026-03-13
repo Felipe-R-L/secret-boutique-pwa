@@ -38,6 +38,8 @@ export type Database = {
           name: string;
           price: number;
           description: string | null;
+          curatorship: string | null;
+          images: Json | null;
           image: string | null;
           image_url: string | null;
           category: string;
@@ -54,6 +56,8 @@ export type Database = {
           name: string;
           price: number;
           description?: string | null;
+          curatorship?: string | null;
+          images?: Json | null;
           image?: string | null;
           image_url?: string | null;
           category?: string;
@@ -70,6 +74,8 @@ export type Database = {
           name?: string;
           price?: number;
           description?: string | null;
+          curatorship?: string | null;
+          images?: Json | null;
           image?: string | null;
           image_url?: string | null;
           category?: string;
@@ -80,6 +86,32 @@ export type Database = {
           is_featured?: boolean | null;
           created_at?: string;
           updated_at?: string;
+        };
+      };
+      reviews: {
+        Row: {
+          id: string;
+          product_id: string;
+          ip_hash: string;
+          rating: number;
+          comment: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          ip_hash: string;
+          rating: number;
+          comment?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          ip_hash?: string;
+          rating?: number;
+          comment?: string | null;
+          created_at?: string;
         };
       };
       store_settings: {

@@ -41,10 +41,12 @@ export const productMutationSchema = z
     name: z.string().trim().min(1).max(140),
     price: z.coerce.number().positive(),
     description: z.string().trim().min(1).max(1500),
+    curatorship: z.string().trim().max(6000).optional(),
     category: z.string().trim().min(1).max(80),
     isFeatured: z.coerce.boolean().default(false),
     inStock: z.coerce.boolean().default(true),
     imageUrl: z.string().url().optional(),
+    imageUrls: z.array(z.string().url()).max(20).optional(),
     specs: z
       .array(
         z
@@ -55,6 +57,14 @@ export const productMutationSchema = z
           .strict(),
       )
       .default([]),
+  })
+  .strict();
+
+export const submitAnonymousReviewSchema = z
+  .object({
+    productId: z.string().uuid(),
+    rating: z.coerce.number().int().min(1).max(5),
+    comment: z.string().trim().max(4000).optional(),
   })
   .strict();
 

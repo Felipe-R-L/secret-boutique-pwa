@@ -9,6 +9,7 @@ export interface Product {
   name: string;
   price: number;
   description: string;
+  curatorship?: string | null;
   image?: string;
   image_url?: string | null;
   images?: string[];

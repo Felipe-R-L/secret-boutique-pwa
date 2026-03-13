@@ -10,6 +10,17 @@ type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 
 type StoreSettingsRow = Database["public"]["Tables"]["store_settings"]["Row"];
 
+function parseProductImageUrls(
+  images: Database["public"]["Tables"]["products"]["Row"]["images"],
+): string[] {
+  if (!Array.isArray(images)) return [];
+
+  return images
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 function mapProduct(row: ProductRow): Product {
   const specs =
     row.specs && typeof row.specs === "object"
@@ -21,7 +32,9 @@ function mapProduct(row: ProductRow): Product {
     name: row.name,
     price: Number(row.price),
     description: row.description ?? "",
+    curatorship: row.curatorship,
     image: row.image ?? undefined,
+    images: parseProductImageUrls(row.images),
     image_url: row.image_url,
     category: row.category,
     specs,
@@ -40,7 +53,7 @@ export async function getCatalogData() {
     supabase
       .from("products")
       .select(
-        "id,name,price,description,image,image_url,category,specs,rating,reviews,in_stock,is_featured,created_at,updated_at",
+        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,is_featured,created_at,updated_at",
       )
       .eq("in_stock", true)
       .order("created_at", { ascending: false }),

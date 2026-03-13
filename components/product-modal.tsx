@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/carousel";
 import { useCartStore, Product } from "@/lib/store/cart-store";
 import { getPrimaryProductImage, getProductImages } from "@/lib/product-images";
+import { ProductCuratorship } from "@/components/product-curatorship";
+import { AnonymousReviews } from "@/components/anonymous-reviews";
 
 interface ProductModalProps {
   product: Product | null;
@@ -62,8 +64,7 @@ export function ProductModal({
     useState(false);
   const addItem = useCartStore((state) => state.addItem);
   const carouselWrapperRef = useRef<HTMLDivElement | null>(null);
-  const imageCount =
-    product?.images?.filter(Boolean).length ?? (product?.image ? 1 : 0);
+  const imageCount = product ? getProductImages(product).length : 0;
 
   const pauseAutoplay = (duration = AUTO_PLAY_MS) => {
     setAutoplayPausedUntil(Date.now() + duration);
@@ -391,9 +392,10 @@ export function ProductModal({
             </DialogHeader>
 
             <Tabs defaultValue="description" className="mt-6 flex-1">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="description">Descrição</TabsTrigger>
                 <TabsTrigger value="specs">Especificações</TabsTrigger>
+                <TabsTrigger value="reviews">Avaliações</TabsTrigger>
               </TabsList>
 
               <TabsContent value="description" className="mt-4">
@@ -425,6 +427,10 @@ export function ProductModal({
                     </span>
                   </div>
                 </div>
+
+                <div className="mt-6">
+                  <ProductCuratorship curatorship={product.curatorship} />
+                </div>
               </TabsContent>
 
               <TabsContent value="specs" className="mt-4">
@@ -449,6 +455,12 @@ export function ProductModal({
                     Especificações não disponíveis.
                   </p>
                 )}
+              </TabsContent>
+
+              <TabsContent value="reviews" className="mt-4">
+                <div className="mt-6">
+                  <AnonymousReviews productId={product.id} />
+                </div>
               </TabsContent>
             </Tabs>
 

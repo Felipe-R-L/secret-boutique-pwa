@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/carousel";
 import { useCartStore, Product } from "@/lib/store/cart-store";
 import { getProductImages } from "@/lib/product-images";
+import { ProductCuratorship } from "@/components/product-curatorship";
+import { AnonymousReviews } from "@/components/anonymous-reviews";
 
 interface ProductDrawerProps {
   product: Product | null;
@@ -57,8 +59,7 @@ export function ProductDrawer({
     useState(false);
   const addItem = useCartStore((state) => state.addItem);
   const carouselWrapperRef = useRef<HTMLDivElement | null>(null);
-  const imageCount =
-    product?.images?.filter(Boolean).length ?? (product?.image ? 1 : 0);
+  const imageCount = product ? getProductImages(product).length : 0;
 
   const pauseAutoplay = (duration = AUTO_PLAY_MS) => {
     setAutoplayPausedUntil(Date.now() + duration);
@@ -439,6 +440,10 @@ export function ProductDrawer({
                   </span>
                 </div>
               </div>
+
+              <ProductCuratorship curatorship={product.curatorship} />
+
+              <AnonymousReviews productId={product.id} />
             </div>
           </div>
 

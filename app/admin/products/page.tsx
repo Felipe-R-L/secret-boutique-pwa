@@ -29,6 +29,15 @@ function parseCategories(value: Json | null): string[] {
   );
 }
 
+function parseImageUrls(value: Json | null): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 export default async function AdminProductsPage() {
   await requireAdminContext();
 
@@ -37,7 +46,7 @@ export default async function AdminProductsPage() {
   const { data: products, error: productsError } = await supabase
     .from("products")
     .select(
-      "id,name,price,description,category,in_stock,is_featured,image_url,specs,created_at",
+      "id,name,price,description,curatorship,category,in_stock,is_featured,images,image_url,specs,created_at",
     )
     .order("created_at", { ascending: false });
 
@@ -66,10 +75,12 @@ export default async function AdminProductsPage() {
       name: product.name,
       price: Number(product.price),
       description: product.description ?? "",
+      curatorship: product.curatorship ?? "",
       category: product.category,
       inStock: product.in_stock ?? true,
       isFeatured: product.is_featured ?? false,
       imageUrl: product.image_url ?? undefined,
+      imageUrls: parseImageUrls(product.images),
       specs: parseSpecs(product.specs),
     }),
   );

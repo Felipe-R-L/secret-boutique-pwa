@@ -39,11 +39,16 @@ export async function upsertProduct(input: unknown) {
     name: parsed.data.name,
     price: parsed.data.price,
     description: parsed.data.description,
+    curatorship: parsed.data.curatorship?.trim() || null,
     category: parsed.data.category,
     is_featured: parsed.data.isFeatured,
     in_stock: parsed.data.inStock,
     specs: specsJson,
-    ...(parsed.data.imageUrl ? { image_url: parsed.data.imageUrl } : {}),
+    images: parsed.data.imageUrls ?? [],
+    image_url:
+      (parsed.data.imageUrls && parsed.data.imageUrls.length > 0
+        ? parsed.data.imageUrls[0]
+        : parsed.data.imageUrl) ?? null,
     updated_at: new Date().toISOString(),
   };
 
