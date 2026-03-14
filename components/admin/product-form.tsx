@@ -152,7 +152,7 @@ export function ProductForm({
               uploadError.message.toLowerCase().includes("bucket not found")
             ) {
               setMessage(
-                "Erro no upload: bucket 'products' nao encontrado. Rode a migration scripts/004_storage_products_bucket.sql no Supabase SQL Editor.",
+                "Erro no upload: bucket 'products' não encontrado. Rode a migration scripts/004_storage_products_bucket.sql no Supabase SQL Editor.",
               );
               return;
             }
@@ -240,7 +240,7 @@ export function ProductForm({
           type="number"
           min="0"
           step="0.01"
-          placeholder="Preco"
+          placeholder="Preço"
           required
         />
         <Input
@@ -257,7 +257,7 @@ export function ProductForm({
         <p className="text-xs text-muted-foreground">
           {imageFiles.length > 0
             ? `${imageFiles.length} imagem(ns) selecionada(s) para upload no bucket 'products'.`
-            : `${keptExistingImageUrls.length} imagem(ns) ja vinculada(s) a este produto.`}
+            : `${keptExistingImageUrls.length} imagem(ns) já vinculada(s) a este produto.`}
         </p>
       )}
 
@@ -347,7 +347,7 @@ export function ProductForm({
       />
 
       <div className="space-y-2 rounded-lg border border-border p-3">
-        <p className="text-sm font-medium">Especificacoes dinamicas</p>
+        <p className="text-sm font-medium">Especificações dinâmicas</p>
 
         <div className="space-y-2">
           {specs.map((spec, index) => (
@@ -381,7 +381,7 @@ export function ProductForm({
         </div>
 
         <Button type="button" variant="secondary" onClick={addSpec}>
-          Adicionar especificacao
+          Adicionar especificação
         </Button>
       </div>
 

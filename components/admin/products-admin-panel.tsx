@@ -175,7 +175,7 @@ export function ProductsAdminPanel({
             <DialogHeader>
               <DialogTitle>Novo produto</DialogTitle>
               <DialogDescription>
-                Preencha os dados, incluindo imagem e especificacoes dinamicas.
+                Preencha os dados, incluindo imagem e especificações dinâmicas.
               </DialogDescription>
             </DialogHeader>
             <ProductForm

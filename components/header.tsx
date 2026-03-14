@@ -31,7 +31,7 @@ export function Header() {
         <div className="flex items-center justify-center gap-2 text-xs font-medium text-foreground/80 sm:text-sm">
           <Sparkles className="size-3.5 shrink-0" />
           <span>
-            Retirada 100% anônima • Sem julgamentos • 14h às 5h
+            Retirada 100% anônima • Sem contato • 14h às 5h
           </span>
           <Sparkles className="size-3.5 shrink-0" />
         </div>

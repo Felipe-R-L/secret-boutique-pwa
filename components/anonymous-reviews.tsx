@@ -87,13 +87,13 @@ export function AnonymousReviews({ productId }: AnonymousReviewsProps) {
   return (
     <section className="space-y-4 rounded-2xl border border-border bg-card/60 p-4">
       <header className="space-y-1">
-        <h4 className="text-sm font-semibold text-foreground">Avaliacoes anonimas</h4>
+        <h4 className="text-sm font-semibold text-foreground">Avaliações anônimas</h4>
         <p className="text-xs text-muted-foreground">
-          Nenhum nome, email ou identificador pessoal e coletado.
+          Nenhum nome, email ou identificador pessoal é coletado.
         </p>
         {averageRating !== null && (
           <p className="text-xs text-muted-foreground">
-            Media atual: <strong>{averageRating.toFixed(1)}</strong> ({reviews.length} avaliacoes)
+            Média atual: <strong>{averageRating.toFixed(1)}</strong> ({reviews.length} avaliações)
           </p>
         )}
       </header>
@@ -123,12 +123,12 @@ export function AnonymousReviews({ productId }: AnonymousReviewsProps) {
           value={comment}
           onChange={(event) => setComment(event.target.value)}
           maxLength={4000}
-          placeholder="Comentario opcional (sem dados pessoais)"
+          placeholder="Comentário opcional (sem dados pessoais)"
           className="min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
         />
 
         <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Enviando..." : "Deixar uma avaliacao anonima"}
+          {isPending ? "Enviando..." : "Deixar uma avaliação anônima"}
         </Button>
       </form>
 
@@ -139,10 +139,10 @@ export function AnonymousReviews({ productId }: AnonymousReviewsProps) {
       )}
 
       <div className="space-y-3">
-        {isLoading && <p className="text-xs text-muted-foreground">Carregando avaliacoes...</p>}
+        {isLoading && <p className="text-xs text-muted-foreground">Carregando avaliações...</p>}
 
         {!isLoading && reviews.length === 0 && (
-          <p className="text-xs text-muted-foreground">Ainda nao ha avaliacoes para este produto.</p>
+          <p className="text-xs text-muted-foreground">Ainda não há avaliações para este produto.</p>
         )}
 
         {reviews.map((review) => (
@@ -163,9 +163,9 @@ export function AnonymousReviews({ productId }: AnonymousReviewsProps) {
               <span className="text-[11px] text-muted-foreground">{formatDate(review.created_at)}</span>
             </div>
 
-            <p className="mb-1 text-xs font-medium text-foreground/90">Comprador Anonimo</p>
+            <p className="mb-1 text-xs font-medium text-foreground/90">Comprador Anônimo</p>
             <p className="text-sm text-muted-foreground">
-              {review.comment?.trim() || "Sem comentario."}
+              {review.comment?.trim() || "Sem comentário."}
             </p>
           </article>
         ))}
