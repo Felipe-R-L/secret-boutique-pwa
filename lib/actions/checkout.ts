@@ -147,12 +147,69 @@ export async function checkOrderStatus(orderId: unknown) {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("orders")
-    .select("id,status,total_amount,pickup_code")
+    .select("id,status,total_amount,pickup_code,mercadopago_order_id")
     .eq("id", orderId)
     .maybeSingle();
 
   if (error || !data) {
     return { ok: false as const, error: error?.message ?? "Order not found" };
+  }
+
+  // If order is still PENDING and has a MP order, poll MP directly as fallback
+  // (webhooks can't reach localhost in dev)
+  if (data.status === "PENDING" && data.mercadopago_order_id) {
+    try {
+      const mpOrder = await getOrderById(data.mercadopago_order_id);
+      const mpPayment = mpOrder.transactions?.payments?.[0];
+      const mpStatus = mpPayment?.status ?? mpOrder.status;
+
+      // Check if MP reports it as paid/approved
+      const isPaid = ["approved", "paid", "action_required"].includes(mpStatus) 
+        && mpPayment?.status_detail === "waiting_transfer" 
+        ? false // still waiting for transfer
+        : ["approved", "paid"].includes(mpStatus) || mpOrder.status === "processed";
+
+      if (isPaid) {
+        // Generate pickup code
+        let pickupCode = data.pickup_code;
+        if (!pickupCode) {
+          const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+          const bytes = new Uint8Array(6);
+          crypto.getRandomValues(bytes);
+          pickupCode = Array.from(bytes, (b) => chars[b % chars.length]).join("");
+        }
+
+        await supabase
+          .from("orders")
+          .update({
+            status: "PAID",
+            pickup_code: pickupCode,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", data.id);
+
+        // Send voucher email (best effort)
+        try {
+          const { sendVoucherEmail } = await import("@/lib/services/email");
+          await sendVoucherEmail(data.id);
+        } catch (emailErr) {
+          console.error("Failed to send voucher email:", emailErr);
+        }
+
+        return {
+          ok: true as const,
+          data: {
+            id: data.id,
+            status: "PAID",
+            totalAmount: Number(data.total_amount),
+            pickupCode,
+          },
+        };
+      }
+    } catch (mpError) {
+      console.error("MP polling fallback error:", mpError);
+      // Continue with DB status
+    }
   }
 
   return {
