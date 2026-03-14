@@ -3,7 +3,8 @@ import { Header } from "@/components/header";
 import { Catalog } from "@/components/catalog";
 import { Footer } from "@/components/footer";
 import { getCatalogData } from "@/lib/data/catalog";
-
+import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/next"
 export const metadata: Metadata = {
   title: "The Secret Boutique | Bem-estar Sexual em Pitangueiras",
   description:
