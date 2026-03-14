@@ -2,6 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display, Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -116,6 +117,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`font-sans antialiased`}>
+        
         {children}
         <Toaster
           position="bottom-center"
@@ -128,7 +130,8 @@ export default function RootLayout({
             },
           }}
         />
-        <Analytics />
+<Analytics />
+<SpeedInsights />
       </body>
     </html>
   );
