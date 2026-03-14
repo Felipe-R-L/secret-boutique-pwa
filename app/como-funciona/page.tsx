@@ -15,9 +15,9 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Como Funciona — The Secret Boutique",
+  title: "Como Funciona a Retirada Anônima | The Secret Boutique",
   description:
-    "Entenda como funciona o processo de compra e retirada anônima na Secret Boutique.",
+    "Entenda como funciona o processo de compra e retirada 100% anônima e discreta de produtos de sex shop e beleza no JR Dallas Motel, em Pitangueiras.",
 };
 
 const steps = [

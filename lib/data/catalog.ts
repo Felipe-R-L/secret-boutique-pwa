@@ -4,7 +4,7 @@ import type { Product } from "@/lib/store/cart-store";
 
 const DEFAULT_HERO_TITLE = "Descubra o prazer do autocuidado";
 const DEFAULT_HERO_SUBTITLE =
-  "Produtos premium selecionados para transformar seus momentos especiais em experiencias inesqueciveis.";
+  "Produtos premium selecionados para transformar seus momentos especiais em experiências inesquecíveis.";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 
@@ -68,7 +68,7 @@ export async function getCatalogData() {
 
   const productIds = products.map((product) => product.id);
 
-  const [reviewsResult, paidOrdersResult] = await Promise.all([
+  const [reviewsResult, completedOrdersResult] = await Promise.all([
     productIds.length > 0
       ? supabase
           .from("reviews")
@@ -78,7 +78,7 @@ export async function getCatalogData() {
     supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
-      .eq("status", "PAID"),
+      .eq("status", "COMPLETED"),
   ]);
 
   const reviewRows = reviewsResult.data ?? [];
@@ -128,7 +128,7 @@ export async function getCatalogData() {
     products: productsWithMetrics,
     featuredProducts,
     stats: {
-      completedOrdersCount: paidOrdersResult.count ?? 0,
+      completedOrdersCount: completedOrdersResult.count ?? 0,
       averageRating: globalAverageRating,
       totalReviews: globalReviewCount,
     },

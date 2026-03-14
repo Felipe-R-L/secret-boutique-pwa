@@ -14,8 +14,33 @@ const _playfair = Playfair_Display({
 const _inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "The Secret Boutique",
-  description: "Loja de produtos de autocuidado e bem-estar sexual",
+  title: "The Secret Boutique | Bem-estar Sexual e Autocuidado",
+  description:
+    "Sua boutique íntima de autocuidado e bem-estar sexual em Pitangueiras. Produtos selecionados de qualidade com retirada discreta e anônima no JR Dallas Motel.",
+  keywords: [
+    "bem-estar sexual",
+    "autocuidado",
+    "boutique íntima",
+    "sex shop pitangueiras",
+    "produtos de beleza",
+    "cosméticos íntimos",
+    "retirada anônima",
+    "JR Dallas Motel",
+  ],
+  authors: [{ name: "The Secret Boutique" }],
+  openGraph: {
+    title: "The Secret Boutique | Bem-estar Sexual e Autocuidado",
+    description:
+      "Sua boutique íntima de autocuidado e bem-estar sexual em Pitangueiras. Retirada 100% anônima.",
+    url: "https://thesecretboutique.com.br", // Replace with actual domain later
+    siteName: "The Secret Boutique",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "The Secret Boutique",
+    description: "Autocuidado e bem-estar sexual com total privacidade.",
+  },
   icons: {
     icon: [
       {
@@ -42,6 +67,54 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "AdultBoutique",
+              name: "The Secret Boutique",
+              description:
+                "Boutique íntima focada em bem-estar sexual, autocuidado e produtos de beleza. Oferecemos um processo de compra online com retirada 100% anônima e discreta.",
+              url: "https://thesecretboutique.com.br",
+              telephone: "", // Add if they have one
+              address: {
+                "@type": "PostalAddress",
+                addressLocality: "Pitangueiras",
+                addressRegion: "SP",
+                addressCountry: "BR",
+              },
+              department: {
+                "@type": "LocalBusiness",
+                name: "Ponto de Retirada - JR Dallas Motel",
+                address: {
+                  "@type": "PostalAddress",
+                  addressLocality: "Pitangueiras",
+                  addressRegion: "SP",
+                  addressCountry: "BR",
+                },
+              },
+              openingHoursSpecification: [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  dayOfWeek: [
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                  ],
+                  opens: "14:00",
+                  closes: "05:00",
+                },
+              ],
+            }),
+          }}
+        />
+      </head>
       <body className={`font-sans antialiased`}>
         {children}
         <Toaster

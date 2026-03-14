@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Sobre Nós — The Secret Boutique",
+  title: "Sobre Nós | The Secret Boutique",
   description:
-    "Conheça a história da Secret Boutique — bem-estar sexual e autocuidado com total privacidade.",
+    "Conheça a história da Secret Boutique, a sua boutique íntima. Autocuidado, produtos de beleza e bem-estar sexual com total privacidade no JR Dallas Motel em Pitangueiras.",
 };
 
 const values = [
