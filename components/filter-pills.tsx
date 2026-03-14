@@ -23,8 +23,8 @@ export function FilterPills({ selected, onSelect }: FilterPillsProps) {
         className={cn(
           'group flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 md:px-6 md:py-3',
           selected === null
-            ? 'bg-foreground text-background shadow-lg shadow-foreground/20'
-            : 'bg-card text-foreground ring-1 ring-border hover:bg-accent/50 hover:ring-foreground/20'
+            ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+            : 'bg-card text-foreground ring-1 ring-border hover:bg-pastel-rose/30 hover:ring-primary/20'
         )}
       >
         <LayoutGrid className={cn(
@@ -43,8 +43,8 @@ export function FilterPills({ selected, onSelect }: FilterPillsProps) {
             className={cn(
               'group flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 md:px-6 md:py-3',
               selected === category.id
-                ? 'bg-foreground text-background shadow-lg shadow-foreground/20'
-                : 'bg-card text-foreground ring-1 ring-border hover:bg-accent/50 hover:ring-foreground/20'
+                ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                : 'bg-card text-foreground ring-1 ring-border hover:bg-pastel-lavender/30 hover:ring-primary/20'
             )}
           >
             {Icon && <Icon className={cn(

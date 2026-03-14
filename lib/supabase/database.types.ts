@@ -6,6 +6,15 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+export type OrderStatus =
+  | "PENDING"
+  | "PAID"
+  | "PREPARING"
+  | "READY_FOR_PICKUP"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "EXPIRED";
+
 export type Database = {
   public: {
     Tables: {
@@ -148,9 +157,11 @@ export type Database = {
           delivery_method: "MOTEL_PICKUP" | "ROOM_DELIVERY";
           room_number: string | null;
           payment_method: "PIX";
-          status: "PENDING" | "PAID" | "CANCELLED" | "EXPIRED";
+          status: OrderStatus;
           total_amount: number;
           mercadopago_order_id: string | null;
+          pickup_code: string | null;
+          completed_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -161,9 +172,11 @@ export type Database = {
           delivery_method: "MOTEL_PICKUP" | "ROOM_DELIVERY";
           room_number?: string | null;
           payment_method?: "PIX";
-          status?: "PENDING" | "PAID" | "CANCELLED" | "EXPIRED";
+          status?: OrderStatus;
           total_amount: number;
           mercadopago_order_id?: string | null;
+          pickup_code?: string | null;
+          completed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -174,9 +187,11 @@ export type Database = {
           delivery_method?: "MOTEL_PICKUP" | "ROOM_DELIVERY";
           room_number?: string | null;
           payment_method?: "PIX";
-          status?: "PENDING" | "PAID" | "CANCELLED" | "EXPIRED";
+          status?: OrderStatus;
           total_amount?: number;
           mercadopago_order_id?: string | null;
+          pickup_code?: string | null;
+          completed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };

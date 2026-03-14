@@ -364,19 +364,18 @@ export function ProductModal({
           <div className="flex flex-col p-6 lg:p-8">
             <DialogHeader className="space-y-4 text-left">
               <div className="flex items-center gap-2">
-                {product.rating && (
-                  <div className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1">
-                    <Star className="size-4 fill-amber-400 text-amber-400" />
-                    <span className="text-sm font-medium text-amber-700">
-                      {product.rating}
-                    </span>
-                    {product.reviews && (
+                {typeof product.rating === "number" &&
+                  (product.reviews ?? 0) > 0 && (
+                    <div className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1">
+                      <Star className="size-4 fill-amber-400 text-amber-400" />
+                      <span className="text-sm font-medium text-amber-700">
+                        {product.rating.toFixed(1)}
+                      </span>
                       <span className="text-sm text-amber-600">
                         ({product.reviews} avaliações)
                       </span>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
               </div>
 
               <DialogTitle className="font-sans text-2xl font-semibold text-foreground lg:text-3xl">
@@ -391,77 +390,86 @@ export function ProductModal({
               </DialogDescription>
             </DialogHeader>
 
-            <Tabs defaultValue="description" className="mt-6 flex-1">
+            <Tabs defaultValue="description" className="mt-6 flex-1 min-h-0">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="description">Descrição</TabsTrigger>
                 <TabsTrigger value="specs">Especificações</TabsTrigger>
                 <TabsTrigger value="reviews">Avaliações</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="description" className="mt-4">
-                <p
-                  className="leading-relaxed text-muted-foreground"
-                  style={{ fontFamily: "Inter, sans-serif" }}
+              <div className="mt-4 h-85 overflow-hidden">
+                <TabsContent
+                  value="description"
+                  className="mt-0 h-full overflow-y-auto pr-1"
                 >
-                  {product.description}
-                </p>
-
-                {/* Trust badges */}
-                <div className="mt-6 grid grid-cols-3 gap-4">
-                  <div className="flex flex-col items-center gap-2 rounded-xl bg-secondary/50 p-4 text-center">
-                    <Truck className="size-5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-foreground">
-                      Entrega Discreta
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-center gap-2 rounded-xl bg-secondary/50 p-4 text-center">
-                    <Shield className="size-5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-foreground">
-                      Compra Segura
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-center gap-2 rounded-xl bg-secondary/50 p-4 text-center">
-                    <Package className="size-5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-foreground">
-                      Embalagem Neutra
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <ProductCuratorship curatorship={product.curatorship} />
-                </div>
-              </TabsContent>
-
-              <TabsContent value="specs" className="mt-4">
-                {product.specs ? (
-                  <div className="space-y-3">
-                    {Object.entries(product.specs).map(([key, value]) => (
-                      <div key={key} className="flex items-start gap-3">
-                        <Check className="mt-0.5 size-4 shrink-0 text-green-600" />
-                        <div>
-                          <span className="font-medium capitalize text-foreground">
-                            {key.replace(/_/g, " ")}:
-                          </span>
-                          <span className="ml-2 text-muted-foreground">
-                            {value}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">
-                    Especificações não disponíveis.
+                  <p
+                    className="leading-relaxed text-muted-foreground"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    {product.description}
                   </p>
-                )}
-              </TabsContent>
 
-              <TabsContent value="reviews" className="mt-4">
-                <div className="mt-6">
+                  {/* Trust badges */}
+                  <div className="mt-6 grid grid-cols-3 gap-4">
+                    <div className="flex flex-col items-center gap-2 rounded-xl bg-secondary/50 p-4 text-center">
+                      <Truck className="size-5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-foreground">
+                        Entrega Discreta
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 rounded-xl bg-secondary/50 p-4 text-center">
+                      <Shield className="size-5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-foreground">
+                        Compra Segura
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 rounded-xl bg-secondary/50 p-4 text-center">
+                      <Package className="size-5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-foreground">
+                        Embalagem Neutra
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <ProductCuratorship curatorship={product.curatorship} />
+                  </div>
+                </TabsContent>
+
+                <TabsContent
+                  value="specs"
+                  className="mt-0 h-full overflow-y-auto pr-1"
+                >
+                  {product.specs ? (
+                    <div className="space-y-3">
+                      {Object.entries(product.specs).map(([key, value]) => (
+                        <div key={key} className="flex items-start gap-3">
+                          <Check className="mt-0.5 size-4 shrink-0 text-green-600" />
+                          <div>
+                            <span className="font-medium capitalize text-foreground">
+                              {key.replace(/_/g, " ")}:
+                            </span>
+                            <span className="ml-2 text-muted-foreground">
+                              {value}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      Especificações não disponíveis.
+                    </p>
+                  )}
+                </TabsContent>
+
+                <TabsContent
+                  value="reviews"
+                  className="mt-0 h-full overflow-y-auto pr-1"
+                >
                   <AnonymousReviews productId={product.id} />
-                </div>
-              </TabsContent>
+                </TabsContent>
+              </div>
             </Tabs>
 
             {/* Add to cart section */}

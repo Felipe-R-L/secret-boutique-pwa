@@ -4,57 +4,63 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Warm cream/ivory base for elegance */
+  /* Warm cream/ivory base — preserved for elegance */
   --background: oklch(0.975 0.005 85);
   --foreground: oklch(0.22 0.01 50);
   
   /* Card with subtle warmth */
-  --card: oklch(0.995 0.003 85);
+  --card: oklch(0.99 0.004 85);
   --card-foreground: oklch(0.22 0.01 50);
   
-  --popover: oklch(0.995 0.003 85);
+  --popover: oklch(0.99 0.004 85);
   --popover-foreground: oklch(0.22 0.01 50);
   
-  /* Deep espresso/charcoal primary for luxury */
-  --primary: oklch(0.25 0.02 50);
-  --primary-foreground: oklch(0.98 0.005 85);
+  /* Deep wine/plum primary for luxury intimacy */
+  --primary: oklch(0.30 0.08 340);
+  --primary-foreground: oklch(0.97 0.01 340);
   
-  /* Warm stone secondary */
-  --secondary: oklch(0.94 0.008 70);
-  --secondary-foreground: oklch(0.30 0.015 50);
+  /* Sage green pastel secondary */
+  --secondary: oklch(0.93 0.03 155);
+  --secondary-foreground: oklch(0.28 0.04 155);
   
-  /* Muted warm grays */
-  --muted: oklch(0.92 0.006 70);
-  --muted-foreground: oklch(0.50 0.01 50);
+  /* Muted warm grays with slight rose tint */
+  --muted: oklch(0.93 0.008 350);
+  --muted-foreground: oklch(0.48 0.015 350);
   
-  /* Accent - warm rose/blush for subtle femininity */
-  --accent: oklch(0.90 0.04 25);
-  --accent-foreground: oklch(0.30 0.02 25);
+  /* Accent — warm rose pastel with saturation */
+  --accent: oklch(0.89 0.06 10);
+  --accent-foreground: oklch(0.30 0.06 10);
   
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.55 0.22 25);
   
-  /* Warm border tones */
-  --border: oklch(0.90 0.01 70);
-  --input: oklch(0.92 0.008 70);
-  --ring: oklch(0.65 0.03 50);
+  /* Warm border tones with pastel rose hint */
+  --border: oklch(0.91 0.012 350);
+  --input: oklch(0.93 0.008 350);
+  --ring: oklch(0.60 0.06 340);
   
-  --chart-1: oklch(0.65 0.15 25);
-  --chart-2: oklch(0.60 0.10 180);
-  --chart-3: oklch(0.40 0.06 220);
-  --chart-4: oklch(0.80 0.15 85);
-  --chart-5: oklch(0.75 0.15 70);
+  --chart-1: oklch(0.65 0.15 340);
+  --chart-2: oklch(0.70 0.08 155);
+  --chart-3: oklch(0.75 0.06 300);
+  --chart-4: oklch(0.80 0.10 60);
+  --chart-5: oklch(0.70 0.12 10);
   
   --radius: 0.75rem;
   
+  /* Pastel palette for decorative elements */
+  --pastel-rose: oklch(0.88 0.06 350);
+  --pastel-lavender: oklch(0.87 0.06 300);
+  --pastel-sage: oklch(0.90 0.04 150);
+  --pastel-peach: oklch(0.92 0.05 60);
+  
   --sidebar: oklch(0.98 0.005 85);
   --sidebar-foreground: oklch(0.22 0.01 50);
-  --sidebar-primary: oklch(0.25 0.02 50);
-  --sidebar-primary-foreground: oklch(0.98 0.005 85);
-  --sidebar-accent: oklch(0.94 0.008 70);
-  --sidebar-accent-foreground: oklch(0.30 0.015 50);
-  --sidebar-border: oklch(0.90 0.01 70);
-  --sidebar-ring: oklch(0.65 0.03 50);
+  --sidebar-primary: oklch(0.30 0.08 340);
+  --sidebar-primary-foreground: oklch(0.97 0.01 340);
+  --sidebar-accent: oklch(0.93 0.03 155);
+  --sidebar-accent-foreground: oklch(0.28 0.04 155);
+  --sidebar-border: oklch(0.91 0.012 350);
+  --sidebar-ring: oklch(0.60 0.06 340);
 }
 
 .dark {
@@ -143,6 +149,10 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-pastel-rose: var(--pastel-rose);
+  --color-pastel-lavender: var(--pastel-lavender);
+  --color-pastel-sage: var(--pastel-sage);
+  --color-pastel-peach: var(--pastel-peach);
 }
 
 @layer base {

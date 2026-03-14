@@ -7,6 +7,17 @@ import {
   getOrderById,
 } from "@/lib/mercadopago/client";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { randomBytes } from "node:crypto";
+
+function generatePickupCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = randomBytes(6);
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[bytes[i] % chars.length];
+  }
+  return code;
+}
 
 type CheckoutResult =
   | { ok: true; orderId: string; totalAmount: number }
@@ -59,6 +70,21 @@ export async function initializeCheckout(
 
   totalAmount = Number(totalAmount.toFixed(2));
 
+  // Generate a unique pickup code
+  let pickupCode = generatePickupCode();
+  let retries = 0;
+  while (retries < 5) {
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("pickup_code", pickupCode)
+      .maybeSingle();
+
+    if (!existing) break;
+    pickupCode = generatePickupCode();
+    retries++;
+  }
+
   const orderInsert = {
     customer_name: parsed.data.customerName,
     customer_email: parsed.data.customerEmail,
@@ -67,9 +93,10 @@ export async function initializeCheckout(
       parsed.data.deliveryMethod === "ROOM_DELIVERY"
         ? (parsed.data.roomNumber?.trim() ?? null)
         : null,
-    payment_method: parsed.data.paymentMethod,
+    payment_method: "PIX" as const,
     status: "PENDING" as const,
     total_amount: totalAmount,
+    pickup_code: pickupCode,
   };
 
   const { data: orderData, error: orderError } = await supabase
@@ -120,7 +147,7 @@ export async function checkOrderStatus(orderId: unknown) {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("orders")
-    .select("id,status,total_amount")
+    .select("id,status,total_amount,pickup_code")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -134,11 +161,23 @@ export async function checkOrderStatus(orderId: unknown) {
       id: data.id,
       status: data.status,
       totalAmount: Number(data.total_amount),
+      pickupCode: data.pickup_code,
     },
   };
 }
 
-export async function generatePixOrder(orderId: unknown) {
+// Payer info is passed through to Mercado Pago only — NOT stored in our DB
+type PayerInfo = {
+  firstName: string;
+  lastName: string;
+  cpf: string;
+  email: string;
+};
+
+export async function generatePixOrder(
+  orderId: unknown,
+  payerInfo?: PayerInfo,
+) {
   if (typeof orderId !== "string") {
     return { ok: false as const, error: "Invalid order id" };
   }
@@ -163,22 +202,36 @@ export async function generatePixOrder(orderId: unknown) {
   let mpOrderId = order.mercadopago_order_id;
 
   if (!mpOrderId) {
-    const payload = {
+    const firstName = payerInfo?.firstName || order.customer_name.split(" ")[0];
+    const lastName =
+      payerInfo?.lastName || order.customer_name.split(" ").slice(1).join(" ") || order.customer_name;
+
+    const payload: Record<string, unknown> = {
       type: "online",
       processing_mode: "automatic",
       external_reference: order.id,
-      total_amount: Number(order.total_amount),
+      total_amount: String(Number(order.total_amount).toFixed(2)),
       description: `Pedido ${order.id}`,
       payer: {
         email: order.customer_email,
-        first_name: order.customer_name,
+        first_name: firstName,
+        last_name: lastName,
+        ...(payerInfo?.cpf
+          ? {
+              identification: {
+                type: "CPF",
+                number: payerInfo.cpf.replace(/\D/g, ""),
+              },
+            }
+          : {}),
       },
       transactions: {
         payments: [
           {
-            amount: Number(order.total_amount),
+            amount: String(Number(order.total_amount).toFixed(2)),
             payment_method: {
               id: "pix",
+              type: "bank_transfer",
             },
           },
         ],
@@ -224,6 +277,7 @@ export async function generatePixOrder(orderId: unknown) {
       mercadopagoOrderId: mpOrderId,
       qrCodeBase64: pix.qrCodeBase64,
       digitableLine: pix.qrCodeText,
+      ticketUrl: pix.ticketUrl,
       status: order.status,
     };
   }
@@ -238,6 +292,7 @@ export async function generatePixOrder(orderId: unknown) {
       mercadopagoOrderId: mpOrderId,
       qrCodeBase64: pix.qrCodeBase64,
       digitableLine: pix.qrCodeText,
+      ticketUrl: pix.ticketUrl,
       status: order.status,
     };
   } catch (error) {

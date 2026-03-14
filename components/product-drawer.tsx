@@ -364,21 +364,20 @@ export function ProductDrawer({
             {/* Content */}
             <div className="space-y-5 px-5 py-6">
               {/* Rating */}
-              {product.rating && (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1">
-                    <Star className="size-4 fill-amber-400 text-amber-400" />
-                    <span className="text-sm font-medium text-amber-700">
-                      {product.rating}
-                    </span>
-                  </div>
-                  {product.reviews && (
+              {typeof product.rating === "number" &&
+                (product.reviews ?? 0) > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1">
+                      <Star className="size-4 fill-amber-400 text-amber-400" />
+                      <span className="text-sm font-medium text-amber-700">
+                        {product.rating.toFixed(1)}
+                      </span>
+                    </div>
                     <span className="text-sm text-muted-foreground">
                       ({product.reviews} avaliações)
                     </span>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
 
               <SheetHeader className="space-y-2 text-left">
                 <SheetTitle className="font-sans text-2xl font-semibold leading-tight text-foreground">

@@ -1,8 +1,19 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getOrderById } from "@/lib/mercadopago/client";
 import { sendVoucherEmail } from "@/lib/services/email";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+
+function generatePickupCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = randomBytes(6);
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[bytes[i] % chars.length];
+  }
+  return code;
+}
 
 function parseSignature(header: string | null) {
   if (!header) return null;
@@ -122,7 +133,7 @@ export async function POST(request: Request) {
   const supabase = createServiceRoleClient();
   const { data: order, error: orderLookupError } = await supabase
     .from("orders")
-    .select("id,status")
+    .select("id,status,pickup_code")
     .eq("mercadopago_order_id", mpOrderId)
     .maybeSingle();
 
@@ -138,9 +149,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, idempotent: true });
   }
 
+  // Generate pickup code if transitioning to PAID and none exists
+  let pickupCode = order.pickup_code;
+  if (mappedStatus === "PAID" && !pickupCode) {
+    pickupCode = generatePickupCode();
+    // Check uniqueness
+    let retries = 0;
+    while (retries < 5) {
+      const { data: existing } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("pickup_code", pickupCode)
+        .maybeSingle();
+
+      if (!existing) break;
+      pickupCode = generatePickupCode();
+      retries++;
+    }
+  }
+
   const { error: updateError } = await supabase
     .from("orders")
-    .update({ status: mappedStatus, updated_at: new Date().toISOString() })
+    .update({
+      status: mappedStatus,
+      pickup_code: pickupCode,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", order.id);
 
   if (updateError) {

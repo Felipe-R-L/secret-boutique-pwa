@@ -4,6 +4,9 @@ export const adminRoleSchema = z.enum(["ADMIN", "STAFF"]);
 export const orderStatusSchema = z.enum([
   "PENDING",
   "PAID",
+  "PREPARING",
+  "READY_FOR_PICKUP",
+  "COMPLETED",
   "CANCELLED",
   "EXPIRED",
 ]);
@@ -75,12 +78,21 @@ export const checkoutItemSchema = z
   })
   .strict();
 
+// CPF validation: 11 digits only
+const cpfSchema = z
+  .string()
+  .transform((v) => v.replace(/\D/g, ""))
+  .pipe(z.string().length(11, "CPF deve ter 11 dígitos"));
+
 export const initializeCheckoutSchema = z
   .object({
     deliveryMethod: deliveryMethodSchema,
     roomNumber: z.string().trim().max(20).optional(),
     customerName: z.string().trim().min(2).max(120),
     customerEmail: z.string().trim().email().max(180),
+    payerFirstName: z.string().trim().min(1).max(60),
+    payerLastName: z.string().trim().min(1).max(60),
+    payerCpf: cpfSchema,
     paymentMethod: z.literal("PIX"),
     items: z.array(checkoutItemSchema).min(1),
   })

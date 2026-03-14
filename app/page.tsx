@@ -1,5 +1,4 @@
 import { Header } from "@/components/header";
-import { PanicButton } from "@/components/panic-button";
 import { Catalog } from "@/components/catalog";
 import { Footer } from "@/components/footer";
 import { getCatalogData } from "@/lib/data/catalog";
@@ -9,7 +8,6 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      <PanicButton />
       <Header />
       <main>
         <Catalog
@@ -17,6 +15,7 @@ export default async function Home() {
           featuredProducts={data.featuredProducts}
           heroTitle={data.storeSettings.heroTitle}
           heroSubtitle={data.storeSettings.heroSubtitle}
+          stats={data.stats}
         />
       </main>
       <Footer />

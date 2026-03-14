@@ -2,6 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display, Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -13,8 +14,8 @@ const _playfair = Playfair_Display({
 const _inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Dallas Boutique",
-  description: "Loja de produtos de bem estar e eróticos",
+  title: "The Secret Boutique",
+  description: "Loja de produtos de autocuidado e bem-estar sexual",
   icons: {
     icon: [
       {
@@ -43,8 +44,20 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={`font-sans antialiased`}>
         {children}
+        <Toaster
+          position="bottom-center"
+          toastOptions={{
+            style: {
+              background: "transparent",
+              border: "none",
+              boxShadow: "none",
+              padding: 0,
+            },
+          }}
+        />
         <Analytics />
       </body>
     </html>
   );
 }
+

@@ -38,8 +38,8 @@ function mapProduct(row: ProductRow): Product {
     image_url: row.image_url,
     category: row.category,
     specs,
-    rating: row.rating ?? undefined,
-    reviews: row.reviews ?? undefined,
+    rating: undefined,
+    reviews: undefined,
     inStock: row.in_stock ?? true,
     in_stock: row.in_stock ?? true,
     is_featured: row.is_featured ?? false,
@@ -66,14 +66,72 @@ export async function getCatalogData() {
 
   const products = (productsResult.data ?? []).map(mapProduct);
 
+  const productIds = products.map((product) => product.id);
+
+  const [reviewsResult, paidOrdersResult] = await Promise.all([
+    productIds.length > 0
+      ? supabase
+          .from("reviews")
+          .select("product_id,rating")
+          .in("product_id", productIds)
+      : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "PAID"),
+  ]);
+
+  const reviewRows = reviewsResult.data ?? [];
+  const reviewSummaryByProduct = new Map<
+    string,
+    { sum: number; count: number }
+  >();
+
+  for (const review of reviewRows) {
+    const current = reviewSummaryByProduct.get(review.product_id) ?? {
+      sum: 0,
+      count: 0,
+    };
+    current.sum += Number(review.rating);
+    current.count += 1;
+    reviewSummaryByProduct.set(review.product_id, current);
+  }
+
+  const productsWithMetrics = products.map((product) => {
+    const summary = reviewSummaryByProduct.get(product.id);
+    if (!summary || summary.count === 0) return product;
+
+    return {
+      ...product,
+      rating: Number((summary.sum / summary.count).toFixed(1)),
+      reviews: summary.count,
+    };
+  });
+
+  const globalReviewCount = reviewRows.length;
+  const globalAverageRating =
+    globalReviewCount > 0
+      ? Number(
+          (
+            reviewRows.reduce((acc, item) => acc + Number(item.rating), 0) /
+            globalReviewCount
+          ).toFixed(1),
+        )
+      : null;
+
   const settings = settingsResult.data as StoreSettingsRow | null;
-  const featuredProducts = products
+  const featuredProducts = productsWithMetrics
     .filter((product) => product.is_featured)
     .slice(0, 3);
 
   return {
-    products,
+    products: productsWithMetrics,
     featuredProducts,
+    stats: {
+      completedOrdersCount: paidOrdersResult.count ?? 0,
+      averageRating: globalAverageRating,
+      totalReviews: globalReviewCount,
+    },
     storeSettings: {
       heroTitle: settings?.hero_title ?? DEFAULT_HERO_TITLE,
       heroSubtitle: settings?.hero_subtitle ?? DEFAULT_HERO_SUBTITLE,
