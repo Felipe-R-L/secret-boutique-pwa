@@ -126,7 +126,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
         )}
       </div>
 
-      <div className="space-y-3 border-t border-border/50 p-3 sm:p-4">
+      <div className="space-y-3 border-t border-border/50 p-3 text-center sm:p-4 sm:text-left">
         <h3
           className="line-clamp-2 text-sm font-medium leading-snug text-foreground sm:text-base"
           style={{ fontFamily: "Inter, sans-serif" }}
@@ -134,7 +134,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
           {product.name}
         </h3>
 
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/60 p-2.5">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-xl bg-muted/60 p-2 sm:flex-row sm:justify-between sm:gap-3 sm:p-2.5">
           <span className="font-sans text-sm font-semibold text-foreground sm:text-base">
             {formatPrice(product.price)}
           </span>
@@ -143,11 +143,11 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
             variant="secondary"
             size="sm"
             onClick={handleAddToCart}
-            className="h-8 gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground cursor-pointer hover:bg-primary/90"
+            className="h-8 w-full sm:w-auto gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground cursor-pointer hover:bg-primary/90"
             aria-label={`Adicionar ${product.name} ao carrinho`}
           >
-            <ShoppingBag className="size-3.5" />
-            Adicionar
+            <ShoppingBag className="size-3.5 shrink-0" />
+            <span className="truncate">Adicionar</span>
           </Button>
         </div>
       </div>
