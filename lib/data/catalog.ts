@@ -43,6 +43,7 @@ function mapProduct(row: ProductRow): Product {
     inStock: row.in_stock ?? true,
     in_stock: row.in_stock ?? true,
     is_featured: row.is_featured ?? false,
+    stock_quantity: row.stock_quantity ?? 0,
   };
 }
 
@@ -53,7 +54,7 @@ export async function getCatalogData() {
     supabase
       .from("products")
       .select(
-        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,is_featured,created_at,updated_at",
+        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,created_at,updated_at",
       )
       .eq("in_stock", true)
       .order("created_at", { ascending: false }),

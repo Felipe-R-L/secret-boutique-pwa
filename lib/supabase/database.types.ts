@@ -56,6 +56,7 @@ export type Database = {
           rating: number | null;
           reviews: number | null;
           in_stock: boolean | null;
+          stock_quantity: number;
           is_featured: boolean | null;
           created_at: string;
           updated_at: string;
@@ -219,6 +220,38 @@ export type Database = {
           product_id?: string;
           quantity?: number;
           unit_price?: number;
+          created_at?: string;
+        };
+      };
+      inventory_movements: {
+        Row: {
+          id: string;
+          product_id: string;
+          type: "ENTRY" | "EXIT" | "SALE" | "ADJUSTMENT";
+          quantity: number;
+          invoice_total: number | null;
+          unit_cost: number | null;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          type: "ENTRY" | "EXIT" | "SALE" | "ADJUSTMENT";
+          quantity: number;
+          invoice_total?: number | null;
+          unit_cost?: number | null;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          type?: "ENTRY" | "EXIT" | "SALE" | "ADJUSTMENT";
+          quantity?: number;
+          invoice_total?: number | null;
+          unit_cost?: number | null;
+          notes?: string | null;
           created_at?: string;
         };
       };

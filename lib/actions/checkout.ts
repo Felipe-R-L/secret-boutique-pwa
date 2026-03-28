@@ -42,7 +42,7 @@ export async function initializeCheckout(
   const productIds = parsed.data.items.map((item) => item.productId);
   const { data: products, error: productError } = await supabase
     .from("products")
-    .select("id,price,in_stock")
+    .select("id,price,in_stock,stock_quantity")
     .in("id", productIds);
 
   if (productError || !products) {
@@ -62,7 +62,17 @@ export async function initializeCheckout(
     }
 
     if (product.in_stock === false) {
-      return { ok: false, error: `Product out of stock: ${item.productId}` };
+      return { ok: false, error: `Produto fora de estoque: ${item.productId}` };
+    }
+
+    if (
+      typeof product.stock_quantity === "number" &&
+      product.stock_quantity < item.quantity
+    ) {
+      return {
+        ok: false,
+        error: `Estoque insuficiente para o produto. Disponível: ${product.stock_quantity}, solicitado: ${item.quantity}`,
+      };
     }
 
     totalAmount += Number(product.price) * item.quantity;

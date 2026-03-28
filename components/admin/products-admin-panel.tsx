@@ -26,6 +26,7 @@ export type AdminProductCard = {
   category: string;
   inStock: boolean;
   isFeatured: boolean;
+  stockQuantity: number;
   imageUrl?: string;
   imageUrls?: string[];
   specs: Array<{ key: string; value: string }>;
@@ -217,7 +218,9 @@ export function ProductsAdminPanel({
                   </p>
                 </div>
                 <Badge variant={product.inStock ? "secondary" : "outline"}>
-                  {product.inStock ? "Em estoque" : "Sem estoque"}
+                  {product.inStock
+                    ? `Em estoque (${product.stockQuantity})`
+                    : "Sem estoque"}
                 </Badge>
               </div>
 

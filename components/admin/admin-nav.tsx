@@ -5,8 +5,10 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const links = [
+  { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/orders", label: "Pedidos" },
   { href: "/admin/products", label: "Produtos" },
+  { href: "/admin/inventory", label: "Estoque" },
   { href: "/admin/settings", label: "Configurações da Loja" },
 ];
 

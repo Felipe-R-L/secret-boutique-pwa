@@ -20,6 +20,7 @@ export interface Product {
   inStock?: boolean;
   in_stock?: boolean;
   is_featured?: boolean;
+  stock_quantity?: number;
 }
 
 export interface CartItem {
