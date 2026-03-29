@@ -33,8 +33,15 @@ import {
 } from "@/components/ui/carousel";
 import { useCartStore, Product } from "@/lib/store/cart-store";
 import { getPrimaryProductImage, getProductImages } from "@/lib/product-images";
+import {
+  getEffectiveProductPrice,
+  getProductVariant,
+  hasProductVariants,
+  isProductAvailable,
+} from "@/lib/product-variants";
 import { ProductCuratorship } from "@/components/product-curatorship";
 import { AnonymousReviews } from "@/components/anonymous-reviews";
+import { ProductVariantPicker } from "@/components/product-variant-picker";
 
 interface ProductModalProps {
   product: Product | null;
@@ -54,6 +61,7 @@ export function ProductModal({
   const AUTO_PLAY_MS = 3500;
   const [quantity, setQuantity] = useState(1);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
   const [autoplayTick, setAutoplayTick] = useState(0);
   const [isHoveringCarousel, setIsHoveringCarousel] = useState(false);
@@ -64,7 +72,9 @@ export function ProductModal({
     useState(false);
   const addItem = useCartStore((state) => state.addItem);
   const carouselWrapperRef = useRef<HTMLDivElement | null>(null);
-  const imageCount = product ? getProductImages(product).length : 0;
+  const imageCount = product
+    ? getProductImages(product, selectedVariantId).length
+    : 0;
 
   const pauseAutoplay = (duration = AUTO_PLAY_MS) => {
     setAutoplayPausedUntil(Date.now() + duration);
@@ -74,6 +84,7 @@ export function ProductModal({
   useEffect(() => {
     setQuantity(1);
     setActiveImageIndex(0);
+    setSelectedVariantId(null);
     setAutoplayPausedUntil(0);
     setIsHoveringCarousel(false);
     setAutoplayTick(0);
@@ -167,8 +178,14 @@ export function ProductModal({
 
   const handleAddToCart = () => {
     if (!product) return;
+    const selectedVariant = getProductVariant(product, selectedVariantId);
+
+    if (hasProductVariants(product) && !selectedVariant) {
+      return;
+    }
+
     for (let i = 0; i < quantity; i++) {
-      addItem(product);
+      addItem(product, selectedVariant);
     }
     setQuantity(1);
     onOpenChange(false);
@@ -183,7 +200,13 @@ export function ProductModal({
 
   if (!product) return null;
 
-  const productImages = getProductImages(product);
+  const selectedVariant = getProductVariant(product, selectedVariantId);
+  const productHasVariants = hasProductVariants(product);
+  const productImages = getProductImages(product, selectedVariantId);
+  const effectivePrice = getEffectiveProductPrice(product, selectedVariantId);
+  const currentInStock = isProductAvailable(product, selectedVariantId);
+  const addToCartDisabled =
+    !currentInStock || (productHasVariants && !selectedVariant);
   const autoplayIsPaused =
     isAutoplayManuallyPaused ||
     prefersReducedMotion ||
@@ -254,11 +277,15 @@ export function ProductModal({
                 )}
               </Carousel>
 
-              {product.inStock && (
-                <Badge className="absolute left-4 top-4 bg-green-600 hover:bg-green-700">
-                  Em estoque
-                </Badge>
-              )}
+              <Badge
+                className={`absolute left-4 top-4 ${
+                  currentInStock
+                    ? "bg-green-600 hover:bg-green-700"
+                    : "bg-muted text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {currentInStock ? "Em estoque" : "Indisponível"}
+              </Badge>
             </div>
 
             {productImages.length > 1 && (
@@ -386,9 +413,30 @@ export function ProductModal({
                 className="text-3xl font-bold text-foreground lg:text-4xl"
                 style={{ fontFamily: "Playfair Display, serif" }}
               >
-                {formatPrice(product.price)}
+                {formatPrice(effectivePrice)}
               </DialogDescription>
+
+              {productHasVariants && !selectedVariant && (
+                <p className="text-sm text-muted-foreground">
+                  Escolha uma variante para filtrar a galeria e liberar a compra.
+                </p>
+              )}
             </DialogHeader>
+
+            {productHasVariants && (
+              <div className="mt-6">
+                <ProductVariantPicker
+                  product={product}
+                  selectedVariantId={selectedVariantId}
+                  onSelect={(variantId) => {
+                    setSelectedVariantId(variantId);
+                    setActiveImageIndex(0);
+                    carouselApi?.scrollTo(0);
+                    pauseAutoplay();
+                  }}
+                />
+              </div>
+            )}
 
             <Tabs defaultValue="description" className="mt-6 flex-1 min-h-0">
               <TabsList className="grid w-full grid-cols-3">
@@ -440,6 +488,30 @@ export function ProductModal({
                   value="specs"
                   className="mt-0 h-full overflow-y-auto pr-1"
                 >
+                  {selectedVariant?.attributes.length ? (
+                    <div className="mb-5 space-y-3 rounded-2xl border border-border bg-muted/40 p-4">
+                      <p className="text-sm font-semibold text-foreground">
+                        Variante selecionada
+                      </p>
+                      {selectedVariant.attributes.map((attribute) => (
+                        <div
+                          key={`${selectedVariant.id}-${attribute.key}-${attribute.value}`}
+                          className="flex items-start gap-3"
+                        >
+                          <Check className="mt-0.5 size-4 shrink-0 text-green-600" />
+                          <div>
+                            <span className="font-medium capitalize text-foreground">
+                              {attribute.key}:
+                            </span>
+                            <span className="ml-2 text-muted-foreground">
+                              {attribute.value}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
                   {product.specs ? (
                     <div className="space-y-3">
                       {Object.entries(product.specs).map(([key, value]) => (
@@ -507,8 +579,13 @@ export function ProductModal({
                 className="h-14 w-full text-base font-semibold"
                 size="lg"
                 onClick={handleAddToCart}
+                disabled={addToCartDisabled}
               >
-                Adicionar ao Carrinho - {formatPrice(product.price * quantity)}
+                {productHasVariants && !selectedVariant
+                  ? "Escolha uma variante"
+                  : currentInStock
+                    ? `Adicionar ao Carrinho - ${formatPrice(effectivePrice * quantity)}`
+                    : "Sem estoque"}
               </Button>
             </div>
 

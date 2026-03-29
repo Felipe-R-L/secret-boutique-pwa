@@ -32,8 +32,15 @@ import {
 } from "@/components/ui/carousel";
 import { useCartStore, Product } from "@/lib/store/cart-store";
 import { getProductImages } from "@/lib/product-images";
+import {
+  getEffectiveProductPrice,
+  getProductVariant,
+  hasProductVariants,
+  isProductAvailable,
+} from "@/lib/product-variants";
 import { ProductCuratorship } from "@/components/product-curatorship";
 import { AnonymousReviews } from "@/components/anonymous-reviews";
+import { ProductVariantPicker } from "@/components/product-variant-picker";
 
 interface ProductDrawerProps {
   product: Product | null;
@@ -49,6 +56,7 @@ export function ProductDrawer({
   const AUTO_PLAY_MS = 5000;
   const [quantity, setQuantity] = useState(1);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
   const [autoplayTick, setAutoplayTick] = useState(0);
   const [isHoveringCarousel, setIsHoveringCarousel] = useState(false);
@@ -59,7 +67,9 @@ export function ProductDrawer({
     useState(false);
   const addItem = useCartStore((state) => state.addItem);
   const carouselWrapperRef = useRef<HTMLDivElement | null>(null);
-  const imageCount = product ? getProductImages(product).length : 0;
+  const imageCount = product
+    ? getProductImages(product, selectedVariantId).length
+    : 0;
 
   const pauseAutoplay = (duration = AUTO_PLAY_MS) => {
     setAutoplayPausedUntil(Date.now() + duration);
@@ -69,6 +79,7 @@ export function ProductDrawer({
   useEffect(() => {
     setQuantity(1);
     setActiveImageIndex(0);
+    setSelectedVariantId(null);
     setAutoplayPausedUntil(0);
     setIsHoveringCarousel(false);
     setAutoplayTick(0);
@@ -162,8 +173,14 @@ export function ProductDrawer({
 
   const handleAddToCart = () => {
     if (!product) return;
+    const selectedVariant = getProductVariant(product, selectedVariantId);
+
+    if (hasProductVariants(product) && !selectedVariant) {
+      return;
+    }
+
     for (let i = 0; i < quantity; i++) {
-      addItem(product);
+      addItem(product, selectedVariant);
     }
     setQuantity(1);
     onOpenChange(false);
@@ -178,7 +195,11 @@ export function ProductDrawer({
 
   if (!product) return null;
 
-  const productImages = getProductImages(product);
+  const selectedVariant = getProductVariant(product, selectedVariantId);
+  const productHasVariants = hasProductVariants(product);
+  const productImages = getProductImages(product, selectedVariantId);
+  const effectivePrice = getEffectiveProductPrice(product, selectedVariantId);
+  const currentInStock = isProductAvailable(product, selectedVariantId);
   const autoplayIsPaused =
     isAutoplayManuallyPaused ||
     prefersReducedMotion ||
@@ -255,11 +276,15 @@ export function ProductDrawer({
                   )}
                 </Carousel>
 
-                {product.inStock && (
-                  <Badge className="absolute left-4 top-4 bg-green-600 hover:bg-green-700">
-                    Em estoque
-                  </Badge>
-                )}
+                <Badge
+                  className={`absolute left-4 top-4 ${
+                    currentInStock
+                      ? "bg-green-600 hover:bg-green-700"
+                      : "bg-muted text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {currentInStock ? "Em estoque" : "Indisponível"}
+                </Badge>
               </div>
 
               {productImages.length > 1 && (
@@ -384,9 +409,22 @@ export function ProductDrawer({
                   {product.name}
                 </SheetTitle>
                 <SheetDescription className="font-sans text-3xl font-bold text-foreground">
-                  {formatPrice(product.price)}
+                  {formatPrice(effectivePrice)}
                 </SheetDescription>
               </SheetHeader>
+
+              {productHasVariants && (
+                <ProductVariantPicker
+                  product={product}
+                  selectedVariantId={selectedVariantId}
+                  onSelect={(variantId) => {
+                    setSelectedVariantId(variantId);
+                    setActiveImageIndex(0);
+                    carouselApi?.scrollTo(0);
+                    pauseAutoplay();
+                  }}
+                />
+              )}
 
               <p
                 className="leading-relaxed text-muted-foreground"
@@ -396,13 +434,27 @@ export function ProductDrawer({
               </p>
 
               {/* Specs */}
-              {product.specs && (
+              {(product.specs || selectedVariant?.attributes.length) && (
                 <div className="space-y-3 rounded-xl bg-secondary/50 p-4">
                   <h4 className="text-sm font-semibold text-foreground">
                     Especificações
                   </h4>
+                  {selectedVariant?.attributes.length ? (
+                    <div className="grid grid-cols-2 gap-3 border-b border-border/60 pb-3">
+                      {selectedVariant.attributes.map((attribute) => (
+                        <div key={`${selectedVariant.id}-${attribute.key}-${attribute.value}`}>
+                          <span className="text-xs capitalize text-muted-foreground">
+                            {attribute.key}
+                          </span>
+                          <p className="text-sm font-medium text-foreground">
+                            {attribute.value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-3">
-                    {Object.entries(product.specs)
+                    {Object.entries(product.specs ?? {})
                       .slice(0, 4)
                       .map(([key, value]) => (
                         <div key={key}>
@@ -474,8 +526,13 @@ export function ProductDrawer({
               className="h-12 flex-1 text-base font-semibold"
               size="lg"
               onClick={handleAddToCart}
+              disabled={!currentInStock || (productHasVariants && !selectedVariant)}
             >
-              Adicionar - {formatPrice(product.price * quantity)}
+              {productHasVariants && !selectedVariant
+                ? "Escolha uma variante"
+                : currentInStock
+                  ? `Adicionar - ${formatPrice(effectivePrice * quantity)}`
+                  : "Sem estoque"}
             </Button>
           </SheetFooter>
         </div>

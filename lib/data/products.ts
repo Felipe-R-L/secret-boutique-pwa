@@ -24,6 +24,42 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 127,
     inStock: true,
+    stock_quantity: 24,
+    variants: [
+      {
+        id: "1-amber-120",
+        sku: "OMS-AMB-120",
+        label: "Ambiente Dourado 120ml",
+        price: 45.9,
+        stock_quantity: 12,
+        in_stock: true,
+        images: [
+          "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=1000&h=1000&fit=crop",
+          "https://images.unsplash.com/photo-1617897903246-719242758050?w=1000&h=1000&fit=crop",
+        ],
+        attributes: [
+          { key: "Fragrância", value: "Âmbar" },
+          { key: "Volume", value: "120ml" },
+        ],
+        is_default: true,
+      },
+      {
+        id: "1-rose-200",
+        sku: "OMS-ROS-200",
+        label: "Rosa Veludo 200ml",
+        price: 69.9,
+        stock_quantity: 12,
+        in_stock: true,
+        images: [
+          "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=1000&h=1000&fit=crop",
+          "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=1000&h=1000&fit=crop",
+        ],
+        attributes: [
+          { key: "Fragrância", value: "Rosa" },
+          { key: "Volume", value: "200ml" },
+        ],
+      },
+    ],
   },
   {
     id: "2",

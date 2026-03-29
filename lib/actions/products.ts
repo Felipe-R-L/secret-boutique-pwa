@@ -6,6 +6,12 @@ import { requireAdminContext } from "@/lib/auth/admin";
 import { productMutationSchema } from "@/lib/schemas";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
+function toUniqueStrings(values: string[]) {
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+  );
+}
+
 const deleteProductSchema = z
   .object({
     productId: z.string().uuid(),
@@ -33,22 +39,59 @@ export async function upsertProduct(input: unknown) {
     {},
   );
 
+  const normalizedVariants = parsed.data.variants.map((variant) => ({
+    id: variant.id?.trim() || crypto.randomUUID(),
+    sku: variant.sku.trim(),
+    label: variant.label.trim(),
+    price: Number(variant.price),
+    stock_quantity: variant.stockQuantity,
+    in_stock: variant.inStock && variant.stockQuantity > 0,
+    images: toUniqueStrings(variant.images),
+    attributes: variant.attributes.map((attribute) => ({
+      key: attribute.key.trim(),
+      value: attribute.value.trim(),
+    })),
+    is_default: variant.isDefault,
+  }));
+
+  const hasVariants = normalizedVariants.length > 0;
+  const aggregateImages = toUniqueStrings([
+    ...(parsed.data.imageUrls ?? []),
+    ...normalizedVariants.flatMap((variant) => variant.images),
+  ]);
+  const aggregatePrice = hasVariants
+    ? Math.min(...normalizedVariants.map((variant) => variant.price))
+    : parsed.data.price;
+  const aggregateStockQuantity = hasVariants
+    ? normalizedVariants.reduce(
+        (total, variant) => total + variant.stock_quantity,
+        0,
+      )
+    : undefined;
+  const aggregateInStock = hasVariants
+    ? normalizedVariants.some((variant) => variant.in_stock)
+    : parsed.data.inStock;
+
   const supabase = createServiceRoleClient();
 
   const productPayload = {
     name: parsed.data.name,
-    price: parsed.data.price,
+    price: aggregatePrice,
     description: parsed.data.description,
     curatorship: parsed.data.curatorship?.trim() || null,
     category: parsed.data.category,
     is_featured: parsed.data.isFeatured,
-    in_stock: parsed.data.inStock,
+    in_stock: aggregateInStock,
     specs: specsJson,
-    images: parsed.data.imageUrls ?? [],
+    images: aggregateImages,
     image_url:
-      (parsed.data.imageUrls && parsed.data.imageUrls.length > 0
-        ? parsed.data.imageUrls[0]
+      (aggregateImages.length > 0
+        ? aggregateImages[0]
         : parsed.data.imageUrl) ?? null,
+    variants: normalizedVariants,
+    ...(typeof aggregateStockQuantity === "number"
+      ? { stock_quantity: aggregateStockQuantity }
+      : {}),
     updated_at: new Date().toISOString(),
   };
 

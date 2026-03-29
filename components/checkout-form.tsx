@@ -93,6 +93,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
       paymentMethod: "PIX",
       items: items.map((item) => ({
         productId: item.product.id,
+        variantId: item.variant?.id,
         quantity: item.quantity,
       })),
     });

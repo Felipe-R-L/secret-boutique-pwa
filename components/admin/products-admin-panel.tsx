@@ -30,6 +30,17 @@ export type AdminProductCard = {
   imageUrl?: string;
   imageUrls?: string[];
   specs: Array<{ key: string; value: string }>;
+  variants: Array<{
+    id: string;
+    sku: string;
+    label: string;
+    price: number;
+    stockQuantity: number;
+    inStock: boolean;
+    isDefault?: boolean;
+    images?: string[];
+    attributes: Array<{ key: string; value: string }>;
+  }>;
 };
 
 interface ProductsAdminPanelProps {
@@ -172,11 +183,11 @@ export function ProductsAdminPanel({
               Novo produto
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
             <DialogHeader>
               <DialogTitle>Novo produto</DialogTitle>
               <DialogDescription>
-                Preencha os dados, incluindo imagem e especificações dinâmicas.
+                Preencha os dados do produto e, se necessário, crie variantes com SKU, preço, estoque e galeria próprios.
               </DialogDescription>
             </DialogHeader>
             <ProductForm
@@ -232,12 +243,19 @@ export function ProductsAdminPanel({
                 <strong className="text-sm">
                   R$ {product.price.toFixed(2)}
                 </strong>
-                {product.isFeatured && (
-                  <span className="inline-flex items-center gap-1 text-xs text-amber-600">
-                    <Star className="size-3 fill-amber-500 text-amber-500" />
-                    Destaque
-                  </span>
-                )}
+                <div className="flex items-center gap-2 text-xs">
+                  {product.variants.length > 0 && (
+                    <span className="rounded-full bg-pastel-lavender/25 px-2 py-1 text-foreground">
+                      {product.variants.length} variante{product.variants.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {product.isFeatured && (
+                    <span className="inline-flex items-center gap-1 text-amber-600">
+                      <Star className="size-3 fill-amber-500 text-amber-500" />
+                      Destaque
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -252,10 +270,12 @@ export function ProductsAdminPanel({
                       Editar
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                  <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
                     <DialogHeader>
                       <DialogTitle>Editar produto</DialogTitle>
-                      <DialogDescription>{product.name}</DialogDescription>
+                      <DialogDescription>
+                        {product.name} {product.variants.length > 0 ? `• ${product.variants.length} variante${product.variants.length > 1 ? "s" : ""}` : "• produto simples"}
+                      </DialogDescription>
                     </DialogHeader>
                     <ProductForm
                       mode="edit"
@@ -272,6 +292,7 @@ export function ProductsAdminPanel({
                         imageUrl: product.imageUrl,
                         imageUrls: product.imageUrls,
                         specs: product.specs,
+                        variants: product.variants,
                       }}
                       onSaved={() => setEditingProductId(null)}
                     />

@@ -6,6 +6,61 @@ import { requireAdminContext } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database.types";
 
+function parseVariantAttributes(value: unknown): Array<{ key: string; value: string }> {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const candidate = item as Record<string, unknown>;
+
+      if (typeof candidate.key !== "string" || typeof candidate.value !== "string") {
+        return null;
+      }
+
+      return { key: candidate.key, value: candidate.value };
+    })
+    .filter((item): item is { key: string; value: string } => item !== null);
+}
+
+function parseVariants(value: Json | null): AdminProductCard["variants"] {
+  if (!Array.isArray(value)) return [];
+
+  const parsedVariants = value.map(
+    (item): AdminProductCard["variants"][number] | null => {
+      if (!item || typeof item !== "object") return null;
+      const candidate = item as Record<string, unknown>;
+
+      if (
+        typeof candidate.id !== "string" ||
+        typeof candidate.sku !== "string" ||
+        typeof candidate.label !== "string" ||
+        typeof candidate.price !== "number" ||
+        typeof candidate.stock_quantity !== "number" ||
+        typeof candidate.in_stock !== "boolean"
+      ) {
+        return null;
+      }
+
+      return {
+        id: candidate.id,
+        sku: candidate.sku,
+        label: candidate.label,
+        price: candidate.price,
+        stockQuantity: candidate.stock_quantity,
+        inStock: candidate.in_stock,
+        isDefault: candidate.is_default === true,
+        images: parseImageUrls((candidate.images as Json | null) ?? null),
+        attributes: parseVariantAttributes(candidate.attributes),
+      };
+    },
+  );
+
+  return parsedVariants.filter(
+    (item): item is AdminProductCard["variants"][number] => item !== null,
+  );
+}
+
 function parseSpecs(specs: Json | null): Array<{ key: string; value: string }> {
   if (!specs || typeof specs !== "object" || Array.isArray(specs)) {
     return [];
@@ -46,7 +101,7 @@ export default async function AdminProductsPage() {
   const { data: products, error: productsError } = await supabase
     .from("products")
     .select(
-      "id,name,price,description,curatorship,category,in_stock,stock_quantity,is_featured,images,image_url,specs,created_at",
+      "id,name,price,description,curatorship,category,in_stock,stock_quantity,is_featured,images,image_url,specs,variants,created_at",
     )
     .order("created_at", { ascending: false });
 
@@ -83,6 +138,7 @@ export default async function AdminProductsPage() {
       imageUrl: product.image_url ?? undefined,
       imageUrls: parseImageUrls(product.images),
       specs: parseSpecs(product.specs),
+      variants: parseVariants(product.variants),
     }),
   );
 

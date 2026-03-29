@@ -38,6 +38,27 @@ export const updateStoreCategoriesSchema = z
   })
   .strict();
 
+const productVariantAttributeSchema = z
+  .object({
+    key: z.string().trim().min(1).max(80),
+    value: z.string().trim().min(1).max(120),
+  })
+  .strict();
+
+const productVariantSchema = z
+  .object({
+    id: z.string().trim().min(1).max(120).optional(),
+    sku: z.string().trim().min(1).max(120),
+    label: z.string().trim().min(1).max(140),
+    price: z.coerce.number().positive(),
+    stockQuantity: z.coerce.number().int().min(0),
+    inStock: z.coerce.boolean().default(true),
+    isDefault: z.coerce.boolean().default(false),
+    images: z.array(z.string().url()).max(20).default([]),
+    attributes: z.array(productVariantAttributeSchema).max(12).default([]),
+  })
+  .strict();
+
 export const productMutationSchema = z
   .object({
     productId: z.string().uuid().optional(),
@@ -60,6 +81,7 @@ export const productMutationSchema = z
           .strict(),
       )
       .default([]),
+    variants: z.array(productVariantSchema).max(60).default([]),
   })
   .strict();
 
@@ -74,6 +96,7 @@ export const submitAnonymousReviewSchema = z
 export const checkoutItemSchema = z
   .object({
     productId: z.string().uuid(),
+    variantId: z.string().trim().min(1).max(120).optional(),
     quantity: z.number().int().min(1).max(20),
   })
   .strict();

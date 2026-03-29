@@ -58,6 +58,7 @@ export type Database = {
           in_stock: boolean | null;
           stock_quantity: number;
           is_featured: boolean | null;
+          variants: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -75,7 +76,9 @@ export type Database = {
           rating?: number | null;
           reviews?: number | null;
           in_stock?: boolean | null;
+          stock_quantity?: number;
           is_featured?: boolean | null;
+          variants?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -93,7 +96,9 @@ export type Database = {
           rating?: number | null;
           reviews?: number | null;
           in_stock?: boolean | null;
+          stock_quantity?: number;
           is_featured?: boolean | null;
+          variants?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -202,6 +207,9 @@ export type Database = {
           id: number;
           order_id: string;
           product_id: string;
+          variant_id: string | null;
+          variant_label: string | null;
+          variant_attributes: Json | null;
           quantity: number;
           unit_price: number;
           created_at: string;
@@ -210,6 +218,9 @@ export type Database = {
           id?: number;
           order_id: string;
           product_id: string;
+          variant_id?: string | null;
+          variant_label?: string | null;
+          variant_attributes?: Json | null;
           quantity: number;
           unit_price: number;
           created_at?: string;
@@ -218,6 +229,9 @@ export type Database = {
           id?: number;
           order_id?: string;
           product_id?: string;
+          variant_id?: string | null;
+          variant_label?: string | null;
+          variant_attributes?: Json | null;
           quantity?: number;
           unit_price?: number;
           created_at?: string;

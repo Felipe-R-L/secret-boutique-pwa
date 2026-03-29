@@ -6,7 +6,12 @@ import Link from "next/link";
 import { ShoppingBag, Star, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCartStore, Product } from "@/lib/store/cart-store";
-import { getProductImages, getPrimaryProductImage } from "@/lib/product-images";
+import {
+  getPrimaryProductImage,
+  getSecondaryProductImage,
+  getProductImages,
+} from "@/lib/product-images";
+import { hasProductVariants } from "@/lib/product-variants";
 import { toast } from "sonner";
 
 interface ProductCardProps {
@@ -17,10 +22,18 @@ interface ProductCardProps {
 export function ProductCard({ product, onSelect }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const images = getProductImages(product);
-  const hasSecondImage = images.length > 1;
+  const secondImage = getSecondaryProductImage(product);
+  const hasSecondImage = Boolean(secondImage);
+  const productHasVariants = hasProductVariants(product);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (productHasVariants) {
+      onSelect(product);
+      return;
+    }
+
     addItem(product);
 
     toast.custom(
@@ -101,7 +114,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
         {/* Secondary image (shown on hover) */}
         {hasSecondImage && (
           <Image
-            src={images[1]}
+            src={secondImage!}
             alt={`${product.name} - vista alternativa`}
             fill
             className="object-cover opacity-0 transition-all duration-700 group-hover:opacity-100 group-hover:scale-105"
@@ -113,6 +126,12 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
         {product.inStock && (
           <div className="absolute left-3 top-3 rounded-full bg-pastel-sage/90 px-2.5 py-1 text-[10px] font-medium text-secondary-foreground backdrop-blur-sm">
             Em estoque
+          </div>
+        )}
+
+        {productHasVariants && (
+          <div className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+            {product.variants?.length} opções
           </div>
         )}
 
@@ -135,19 +154,32 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
         </h3>
 
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl bg-muted/60 p-2 sm:flex-row sm:justify-between sm:gap-3 sm:p-2.5">
-          <span className="font-sans text-sm font-semibold text-foreground sm:text-base">
-            {formatPrice(product.price)}
-          </span>
+          <div className="text-center sm:text-left">
+            {productHasVariants && (
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                A partir de
+              </p>
+            )}
+            <span className="font-sans text-sm font-semibold text-foreground sm:text-base">
+              {formatPrice(product.price)}
+            </span>
+          </div>
 
           <Button
             variant="secondary"
             size="sm"
             onClick={handleAddToCart}
             className="h-8 w-full sm:w-auto gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground cursor-pointer hover:bg-primary/90"
-            aria-label={`Adicionar ${product.name} ao carrinho`}
+            aria-label={
+              productHasVariants
+                ? `Ver opções de ${product.name}`
+                : `Adicionar ${product.name} ao carrinho`
+            }
           >
             <ShoppingBag className="size-3.5 shrink-0" />
-            <span className="truncate">Adicionar</span>
+            <span className="truncate">
+              {productHasVariants ? "Ver opções" : "Adicionar"}
+            </span>
           </Button>
         </div>
       </div>

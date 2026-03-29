@@ -6,6 +6,10 @@ import {
   extractPixData,
   getOrderById,
 } from "@/lib/mercadopago/client";
+import {
+  decrementOrderStockByVariants,
+  parsePersistedProductVariants,
+} from "@/lib/server/product-variants";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { randomBytes } from "node:crypto";
 
@@ -42,7 +46,7 @@ export async function initializeCheckout(
   const productIds = parsed.data.items.map((item) => item.productId);
   const { data: products, error: productError } = await supabase
     .from("products")
-    .select("id,price,in_stock,stock_quantity")
+    .select("id,price,in_stock,stock_quantity,variants")
     .in("id", productIds);
 
   if (productError || !products) {
@@ -61,21 +65,40 @@ export async function initializeCheckout(
       return { ok: false, error: `Product not found: ${item.productId}` };
     }
 
-    if (product.in_stock === false) {
-      return { ok: false, error: `Produto fora de estoque: ${item.productId}` };
-    }
+    const variants = parsePersistedProductVariants(product.variants);
+    const selectedVariant = item.variantId
+      ? variants.find((variant) => variant.id === item.variantId)
+      : undefined;
 
-    if (
-      typeof product.stock_quantity === "number" &&
-      product.stock_quantity < item.quantity
-    ) {
+    if (variants.length > 0 && !selectedVariant) {
       return {
         ok: false,
-        error: `Estoque insuficiente para o produto. Disponível: ${product.stock_quantity}, solicitado: ${item.quantity}`,
+        error: `Selecione uma variante válida para o produto ${item.productId}`,
       };
     }
 
-    totalAmount += Number(product.price) * item.quantity;
+    const availableStock = selectedVariant
+      ? selectedVariant.stock_quantity
+      : product.stock_quantity;
+    const available = selectedVariant
+      ? selectedVariant.in_stock
+      : product.in_stock !== false;
+
+    if (!available) {
+      return {
+        ok: false,
+        error: `Produto fora de estoque: ${item.productId}`,
+      };
+    }
+
+    if (typeof availableStock === "number" && availableStock < item.quantity) {
+      return {
+        ok: false,
+        error: `Estoque insuficiente para o produto. Disponível: ${availableStock}, solicitado: ${item.quantity}`,
+      };
+    }
+
+    totalAmount += Number(selectedVariant?.price ?? product.price) * item.quantity;
   }
 
   totalAmount = Number(totalAmount.toFixed(2));
@@ -124,12 +147,19 @@ export async function initializeCheckout(
 
   const orderItems = parsed.data.items.map((item) => {
     const product = productMap.get(item.productId)!;
+    const variants = parsePersistedProductVariants(product.variants);
+    const selectedVariant = item.variantId
+      ? variants.find((variant) => variant.id === item.variantId)
+      : undefined;
 
     return {
       order_id: orderData.id,
       product_id: item.productId,
+      variant_id: selectedVariant?.id ?? null,
+      variant_label: selectedVariant?.label ?? null,
+      variant_attributes: selectedVariant?.attributes ?? null,
       quantity: item.quantity,
-      unit_price: Number(product.price),
+      unit_price: Number(selectedVariant?.price ?? product.price),
     };
   });
 
@@ -197,6 +227,12 @@ export async function checkOrderStatus(orderId: unknown) {
             updated_at: new Date().toISOString(),
           })
           .eq("id", data.id);
+
+        try {
+          await decrementOrderStockByVariants(supabase, data.id);
+        } catch (stockError) {
+          console.error("Failed to deduct stock after fallback payment confirmation:", stockError);
+        }
 
         // Send voucher email (best effort)
         try {

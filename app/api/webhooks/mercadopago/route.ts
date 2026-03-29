@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getOrderById } from "@/lib/mercadopago/client";
+import { decrementOrderStockByVariants } from "@/lib/server/product-variants";
 import { sendVoucherEmail } from "@/lib/services/email";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -185,24 +186,8 @@ export async function POST(request: Request) {
   }
 
   if (mappedStatus === "PAID") {
-    // Deduct stock: fetch order items and create SALE movements
     try {
-      const { data: orderItems } = await supabase
-        .from("order_items")
-        .select("product_id,quantity,unit_price")
-        .eq("order_id", order.id);
-
-      if (orderItems && orderItems.length > 0) {
-        const saleMovements = orderItems.map((item) => ({
-          product_id: item.product_id,
-          type: "SALE" as const,
-          quantity: item.quantity,
-          unit_cost: Number(item.unit_price),
-          notes: `Venda - Pedido ${order.id}`,
-        }));
-
-        await supabase.from("inventory_movements").insert(saleMovements);
-      }
+      await decrementOrderStockByVariants(supabase, order.id);
     } catch (stockError) {
       console.error("Failed to deduct stock", stockError);
     }

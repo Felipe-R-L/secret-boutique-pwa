@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
-import type { Product } from "@/lib/store/cart-store";
+import type {
+  Product,
+  ProductVariant,
+  ProductVariantAttribute,
+} from "@/lib/store/cart-store";
 
 const DEFAULT_HERO_TITLE = "Descubra o prazer do autocuidado";
 const DEFAULT_HERO_SUBTITLE =
@@ -19,6 +23,64 @@ function parseProductImageUrls(
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function parseVariantAttributes(value: unknown): ProductVariantAttribute[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+
+      const candidate = item as Record<string, unknown>;
+      if (typeof candidate.key !== "string" || typeof candidate.value !== "string") {
+        return null;
+      }
+
+      return {
+        key: candidate.key.trim(),
+        value: candidate.value.trim(),
+      };
+    })
+    .filter((item): item is ProductVariantAttribute => Boolean(item));
+}
+
+function parseProductVariants(
+  variants: Database["public"]["Tables"]["products"]["Row"]["variants"],
+): ProductVariant[] {
+  if (!Array.isArray(variants)) return [];
+
+  const parsedVariants = variants.map((item): ProductVariant | null => {
+      if (!item || typeof item !== "object") return null;
+
+      const candidate = item as Record<string, unknown>;
+      if (
+        typeof candidate.id !== "string" ||
+        typeof candidate.sku !== "string" ||
+        typeof candidate.label !== "string" ||
+        typeof candidate.price !== "number" ||
+        typeof candidate.stock_quantity !== "number" ||
+        typeof candidate.in_stock !== "boolean"
+      ) {
+        return null;
+      }
+
+      return {
+        id: candidate.id,
+        sku: candidate.sku,
+        label: candidate.label,
+        price: candidate.price,
+        stock_quantity: candidate.stock_quantity,
+        in_stock: candidate.in_stock,
+        images: parseProductImageUrls((candidate.images as Database["public"]["Tables"]["products"]["Row"]["images"]) ?? null),
+        attributes: parseVariantAttributes(candidate.attributes),
+        is_default: candidate.is_default === true,
+      } satisfies ProductVariant;
+    });
+
+  return parsedVariants.filter(
+    (item): item is ProductVariant => item !== null,
+  );
 }
 
 function mapProduct(row: ProductRow): Product {
@@ -44,6 +106,7 @@ function mapProduct(row: ProductRow): Product {
     in_stock: row.in_stock ?? true,
     is_featured: row.is_featured ?? false,
     stock_quantity: row.stock_quantity ?? 0,
+    variants: parseProductVariants(row.variants),
   };
 }
 
@@ -54,7 +117,7 @@ export async function getCatalogData() {
     supabase
       .from("products")
       .select(
-        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,created_at,updated_at",
+        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,variants,created_at,updated_at",
       )
       .eq("in_stock", true)
       .order("created_at", { ascending: false }),
