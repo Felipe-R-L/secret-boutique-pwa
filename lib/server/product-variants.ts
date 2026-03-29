@@ -21,7 +21,10 @@ export type PersistedProductVariant = {
 type ServiceRoleClient = ReturnType<typeof createServiceRoleClient>;
 
 export function parsePersistedProductVariants(
-  value: Database["public"]["Tables"]["products"]["Row"]["variants"] | Json | null,
+  value:
+    | Database["public"]["Tables"]["products"]["Row"]["variants"]
+    | Json
+    | null,
 ): PersistedProductVariant[] {
   if (!Array.isArray(value)) return [];
 
@@ -55,7 +58,10 @@ export function parsePersistedProductVariants(
               if (!attribute || typeof attribute !== "object") return null;
               const entry = attribute as Record<string, unknown>;
 
-              if (typeof entry.key !== "string" || typeof entry.value !== "string") {
+              if (
+                typeof entry.key !== "string" ||
+                typeof entry.value !== "string"
+              ) {
                 return null;
               }
 
@@ -132,7 +138,10 @@ export async function decrementOrderStockByVariants(
           .filter((item) => item.variant_id === variant.id)
           .reduce((total, item) => total + item.quantity, 0);
 
-        const nextStock = Math.max(variant.stock_quantity - reservedQuantity, 0);
+        const nextStock = Math.max(
+          variant.stock_quantity - reservedQuantity,
+          0,
+        );
 
         return {
           ...variant,

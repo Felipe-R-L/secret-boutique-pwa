@@ -18,7 +18,9 @@ export function getProductVariant(
 ): ProductVariant | undefined {
   if (!variantId) return undefined;
 
-  return getProductVariants(product).find((variant) => variant.id === variantId);
+  return getProductVariants(product).find(
+    (variant) => variant.id === variantId,
+  );
 }
 
 export function getDefaultProductVariant(
@@ -28,7 +30,9 @@ export function getDefaultProductVariant(
 
   return (
     variants.find((variant) => variant.is_default) ??
-    variants.find((variant) => variant.in_stock && variant.stock_quantity > 0) ??
+    variants.find(
+      (variant) => variant.in_stock && variant.stock_quantity > 0,
+    ) ??
     variants[0]
   );
 }

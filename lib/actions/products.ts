@@ -8,7 +8,9 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 function toUniqueStrings(values: string[]) {
   return Array.from(
-    new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+    new Set(
+      values.map((value) => value.trim()).filter((value) => value.length > 0),
+    ),
   );
 }
 

@@ -6,7 +6,9 @@ import { requireAdminContext } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database.types";
 
-function parseVariantAttributes(value: unknown): Array<{ key: string; value: string }> {
+function parseVariantAttributes(
+  value: unknown,
+): Array<{ key: string; value: string }> {
   if (!Array.isArray(value)) return [];
 
   return value
@@ -14,7 +16,10 @@ function parseVariantAttributes(value: unknown): Array<{ key: string; value: str
       if (!item || typeof item !== "object") return null;
       const candidate = item as Record<string, unknown>;
 
-      if (typeof candidate.key !== "string" || typeof candidate.value !== "string") {
+      if (
+        typeof candidate.key !== "string" ||
+        typeof candidate.value !== "string"
+      ) {
         return null;
       }
 

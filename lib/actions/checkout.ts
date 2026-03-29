@@ -98,7 +98,8 @@ export async function initializeCheckout(
       };
     }
 
-    totalAmount += Number(selectedVariant?.price ?? product.price) * item.quantity;
+    totalAmount +=
+      Number(selectedVariant?.price ?? product.price) * item.quantity;
   }
 
   totalAmount = Number(totalAmount.toFixed(2));
@@ -204,10 +205,12 @@ export async function checkOrderStatus(orderId: unknown) {
       const mpStatus = mpPayment?.status ?? mpOrder.status;
 
       // Check if MP reports it as paid/approved
-      const isPaid = ["approved", "paid", "action_required"].includes(mpStatus) 
-        && mpPayment?.status_detail === "waiting_transfer" 
-        ? false // still waiting for transfer
-        : ["approved", "paid"].includes(mpStatus) || mpOrder.status === "processed";
+      const isPaid =
+        ["approved", "paid", "action_required"].includes(mpStatus) &&
+        mpPayment?.status_detail === "waiting_transfer"
+          ? false // still waiting for transfer
+          : ["approved", "paid"].includes(mpStatus) ||
+            mpOrder.status === "processed";
 
       if (isPaid) {
         // Generate pickup code
@@ -216,7 +219,9 @@ export async function checkOrderStatus(orderId: unknown) {
           const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
           const bytes = new Uint8Array(6);
           crypto.getRandomValues(bytes);
-          pickupCode = Array.from(bytes, (b) => chars[b % chars.length]).join("");
+          pickupCode = Array.from(bytes, (b) => chars[b % chars.length]).join(
+            "",
+          );
         }
 
         await supabase
@@ -231,7 +236,10 @@ export async function checkOrderStatus(orderId: unknown) {
         try {
           await decrementOrderStockByVariants(supabase, data.id);
         } catch (stockError) {
-          console.error("Failed to deduct stock after fallback payment confirmation:", stockError);
+          console.error(
+            "Failed to deduct stock after fallback payment confirmation:",
+            stockError,
+          );
         }
 
         // Send voucher email (best effort)
@@ -307,7 +315,9 @@ export async function generatePixOrder(
   if (!mpOrderId) {
     const firstName = payerInfo?.firstName || order.customer_name.split(" ")[0];
     const lastName =
-      payerInfo?.lastName || order.customer_name.split(" ").slice(1).join(" ") || order.customer_name;
+      payerInfo?.lastName ||
+      order.customer_name.split(" ").slice(1).join(" ") ||
+      order.customer_name;
 
     const payload: Record<string, unknown> = {
       type: "online",

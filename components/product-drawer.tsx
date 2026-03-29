@@ -56,7 +56,9 @@ export function ProductDrawer({
   const AUTO_PLAY_MS = 5000;
   const [quantity, setQuantity] = useState(1);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    null,
+  );
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
   const [autoplayTick, setAutoplayTick] = useState(0);
   const [isHoveringCarousel, setIsHoveringCarousel] = useState(false);
@@ -442,7 +444,9 @@ export function ProductDrawer({
                   {selectedVariant?.attributes.length ? (
                     <div className="grid grid-cols-2 gap-3 border-b border-border/60 pb-3">
                       {selectedVariant.attributes.map((attribute) => (
-                        <div key={`${selectedVariant.id}-${attribute.key}-${attribute.value}`}>
+                        <div
+                          key={`${selectedVariant.id}-${attribute.key}-${attribute.value}`}
+                        >
                           <span className="text-xs capitalize text-muted-foreground">
                             {attribute.key}
                           </span>
@@ -526,7 +530,9 @@ export function ProductDrawer({
               className="h-12 flex-1 text-base font-semibold"
               size="lg"
               onClick={handleAddToCart}
-              disabled={!currentInStock || (productHasVariants && !selectedVariant)}
+              disabled={
+                !currentInStock || (productHasVariants && !selectedVariant)
+              }
             >
               {productHasVariants && !selectedVariant
                 ? "Escolha uma variante"

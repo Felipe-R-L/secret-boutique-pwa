@@ -61,7 +61,9 @@ export function ProductModal({
   const AUTO_PLAY_MS = 3500;
   const [quantity, setQuantity] = useState(1);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    null,
+  );
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
   const [autoplayTick, setAutoplayTick] = useState(0);
   const [isHoveringCarousel, setIsHoveringCarousel] = useState(false);
@@ -418,7 +420,8 @@ export function ProductModal({
 
               {productHasVariants && !selectedVariant && (
                 <p className="text-sm text-muted-foreground">
-                  Escolha uma variante para filtrar a galeria e liberar a compra.
+                  Escolha uma variante para filtrar a galeria e liberar a
+                  compra.
                 </p>
               )}
             </DialogHeader>

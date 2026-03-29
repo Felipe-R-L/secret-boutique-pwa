@@ -3,7 +3,9 @@ import { getProductVariant } from "@/lib/product-variants";
 
 const PLACEHOLDER_IMAGE = "/placeholder.svg";
 
-function normalizeImageList(values: Array<string | undefined | null>): string[] {
+function normalizeImageList(
+  values: Array<string | undefined | null>,
+): string[] {
   return values
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value));
@@ -21,7 +23,9 @@ export function getProductImages(
       ? normalizeImageList(variantImages)
       : normalizeImageList([
           ...(product.images ?? []),
-          ...((product.variants ?? []).flatMap((variant) => variant.images ?? [])),
+          ...(product.variants ?? []).flatMap(
+            (variant) => variant.images ?? [],
+          ),
           product.image_url ?? "",
           product.image ?? "",
         ]);

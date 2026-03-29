@@ -58,7 +58,11 @@ export function CartItem({ item }: CartItemProps) {
               variant="ghost"
               size="icon-sm"
               onClick={() =>
-                updateQuantity(item.product.id, item.variant?.id, item.quantity - 1)
+                updateQuantity(
+                  item.product.id,
+                  item.variant?.id,
+                  item.quantity - 1,
+                )
               }
               aria-label="Diminuir quantidade"
             >
@@ -71,7 +75,11 @@ export function CartItem({ item }: CartItemProps) {
               variant="ghost"
               size="icon-sm"
               onClick={() =>
-                updateQuantity(item.product.id, item.variant?.id, item.quantity + 1)
+                updateQuantity(
+                  item.product.id,
+                  item.variant?.id,
+                  item.quantity + 1,
+                )
               }
               aria-label="Aumentar quantidade"
             >

@@ -33,7 +33,10 @@ function parseVariantAttributes(value: unknown): ProductVariantAttribute[] {
       if (!item || typeof item !== "object") return null;
 
       const candidate = item as Record<string, unknown>;
-      if (typeof candidate.key !== "string" || typeof candidate.value !== "string") {
+      if (
+        typeof candidate.key !== "string" ||
+        typeof candidate.value !== "string"
+      ) {
         return null;
       }
 
@@ -51,36 +54,37 @@ function parseProductVariants(
   if (!Array.isArray(variants)) return [];
 
   const parsedVariants = variants.map((item): ProductVariant | null => {
-      if (!item || typeof item !== "object") return null;
+    if (!item || typeof item !== "object") return null;
 
-      const candidate = item as Record<string, unknown>;
-      if (
-        typeof candidate.id !== "string" ||
-        typeof candidate.sku !== "string" ||
-        typeof candidate.label !== "string" ||
-        typeof candidate.price !== "number" ||
-        typeof candidate.stock_quantity !== "number" ||
-        typeof candidate.in_stock !== "boolean"
-      ) {
-        return null;
-      }
+    const candidate = item as Record<string, unknown>;
+    if (
+      typeof candidate.id !== "string" ||
+      typeof candidate.sku !== "string" ||
+      typeof candidate.label !== "string" ||
+      typeof candidate.price !== "number" ||
+      typeof candidate.stock_quantity !== "number" ||
+      typeof candidate.in_stock !== "boolean"
+    ) {
+      return null;
+    }
 
-      return {
-        id: candidate.id,
-        sku: candidate.sku,
-        label: candidate.label,
-        price: candidate.price,
-        stock_quantity: candidate.stock_quantity,
-        in_stock: candidate.in_stock,
-        images: parseProductImageUrls((candidate.images as Database["public"]["Tables"]["products"]["Row"]["images"]) ?? null),
-        attributes: parseVariantAttributes(candidate.attributes),
-        is_default: candidate.is_default === true,
-      } satisfies ProductVariant;
-    });
+    return {
+      id: candidate.id,
+      sku: candidate.sku,
+      label: candidate.label,
+      price: candidate.price,
+      stock_quantity: candidate.stock_quantity,
+      in_stock: candidate.in_stock,
+      images: parseProductImageUrls(
+        (candidate.images as Database["public"]["Tables"]["products"]["Row"]["images"]) ??
+          null,
+      ),
+      attributes: parseVariantAttributes(candidate.attributes),
+      is_default: candidate.is_default === true,
+    } satisfies ProductVariant;
+  });
 
-  return parsedVariants.filter(
-    (item): item is ProductVariant => item !== null,
-  );
+  return parsedVariants.filter((item): item is ProductVariant => item !== null);
 }
 
 function mapProduct(row: ProductRow): Product {

@@ -34,7 +34,9 @@ export function ProductVariantPicker({
     <div className="space-y-3 rounded-2xl border border-border/70 bg-card/70 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-foreground">Escolha sua versão</p>
+          <p className="text-sm font-semibold text-foreground">
+            Escolha sua versão
+          </p>
           <p className="text-xs text-muted-foreground">
             Cada variante tem preço, estoque e galeria próprios.
           </p>
@@ -80,7 +82,9 @@ export function ProductVariantPicker({
                     <p
                       className={cn(
                         "mt-1 text-xs leading-relaxed",
-                        isSelected ? "text-background/75" : "text-muted-foreground",
+                        isSelected
+                          ? "text-background/75"
+                          : "text-muted-foreground",
                       )}
                     >
                       {detailText}

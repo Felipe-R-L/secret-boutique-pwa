@@ -59,7 +59,11 @@ interface CartStore {
   items: CartItem[];
   addItem: (product: Product, variant?: ProductVariant) => void;
   removeItem: (productId: string, variantId?: string) => void;
-  updateQuantity: (productId: string, variantId: string | undefined, quantity: number) => void;
+  updateQuantity: (
+    productId: string,
+    variantId: string | undefined,
+    quantity: number,
+  ) => void;
   clearCart: () => void;
   getTotal: () => number;
   getItemCount: () => number;
@@ -101,7 +105,11 @@ export const useCartStore = create<CartStore>((set, get) => ({
     }));
   },
 
-  updateQuantity: (productId: string, variantId: string | undefined, quantity: number) => {
+  updateQuantity: (
+    productId: string,
+    variantId: string | undefined,
+    quantity: number,
+  ) => {
     if (quantity <= 0) {
       get().removeItem(productId, variantId);
       return;

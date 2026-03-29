@@ -187,7 +187,8 @@ export function ProductsAdminPanel({
             <DialogHeader>
               <DialogTitle>Novo produto</DialogTitle>
               <DialogDescription>
-                Preencha os dados do produto e, se necessário, crie variantes com SKU, preço, estoque e galeria próprios.
+                Preencha os dados do produto e, se necessário, crie variantes
+                com SKU, preço, estoque e galeria próprios.
               </DialogDescription>
             </DialogHeader>
             <ProductForm
@@ -246,7 +247,8 @@ export function ProductsAdminPanel({
                 <div className="flex items-center gap-2 text-xs">
                   {product.variants.length > 0 && (
                     <span className="rounded-full bg-pastel-lavender/25 px-2 py-1 text-foreground">
-                      {product.variants.length} variante{product.variants.length > 1 ? "s" : ""}
+                      {product.variants.length} variante
+                      {product.variants.length > 1 ? "s" : ""}
                     </span>
                   )}
                   {product.isFeatured && (
@@ -274,7 +276,10 @@ export function ProductsAdminPanel({
                     <DialogHeader>
                       <DialogTitle>Editar produto</DialogTitle>
                       <DialogDescription>
-                        {product.name} {product.variants.length > 0 ? `• ${product.variants.length} variante${product.variants.length > 1 ? "s" : ""}` : "• produto simples"}
+                        {product.name}{" "}
+                        {product.variants.length > 0
+                          ? `• ${product.variants.length} variante${product.variants.length > 1 ? "s" : ""}`
+                          : "• produto simples"}
                       </DialogDescription>
                     </DialogHeader>
                     <ProductForm

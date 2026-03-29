@@ -90,7 +90,10 @@ function createEmptyVariantDraft(index = 0): VariantDraft {
   };
 }
 
-function createVariantDraft(value: VariantFormValue, index: number): VariantDraft {
+function createVariantDraft(
+  value: VariantFormValue,
+  index: number,
+): VariantDraft {
   return {
     tempId: crypto.randomUUID(),
     id: value.id,
@@ -231,7 +234,10 @@ export function ProductForm({
 
   const updateVariant = (
     tempId: string,
-    field: keyof Omit<VariantDraft, "tempId" | "attributes" | "existingImageUrls" | "imageUploads">,
+    field: keyof Omit<
+      VariantDraft,
+      "tempId" | "attributes" | "existingImageUrls" | "imageUploads"
+    >,
     value: string | boolean,
   ) => {
     setVariants((prev) =>
@@ -402,10 +408,17 @@ export function ProductForm({
         keptExistingImageUrls.length > 0 ? [...keptExistingImageUrls] : [];
 
       try {
-        const uploadedBaseUrls = await uploadAssets(imageUploads, name || "produto");
+        const uploadedBaseUrls = await uploadAssets(
+          imageUploads,
+          name || "produto",
+        );
         resolvedImageUrls = [...keptExistingImageUrls, ...uploadedBaseUrls];
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Erro no upload das imagens.");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Erro no upload das imagens.",
+        );
         return;
       }
 
@@ -425,7 +438,9 @@ export function ProductForm({
           );
         } catch (error) {
           setMessage(
-            error instanceof Error ? error.message : "Erro no upload das imagens da variante.",
+            error instanceof Error
+              ? error.message
+              : "Erro no upload das imagens da variante.",
           );
           return;
         }
@@ -556,7 +571,9 @@ export function ProductForm({
               Variantes do produto
             </p>
             <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-              Crie combinações vendáveis com SKU, preço, estoque, atributos e fotos próprias. Sem selecionar uma variante na vitrine, o cliente verá a galeria agregada de todas elas.
+              Crie combinações vendáveis com SKU, preço, estoque, atributos e
+              fotos próprias. Sem selecionar uma variante na vitrine, o cliente
+              verá a galeria agregada de todas elas.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -574,7 +591,10 @@ export function ProductForm({
       </div>
 
       <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3 text-xs text-amber-900">
-        Use a galeria geral para imagens editoriais do produto e cadastre as fotos específicas dentro de cada variante. Na vitrine, sem variante selecionada, o cliente verá a galeria agregada; ao escolher uma variante, verá apenas as fotos dela.
+        Use a galeria geral para imagens editoriais do produto e cadastre as
+        fotos específicas dentro de cada variante. Na vitrine, sem variante
+        selecionada, o cliente verá a galeria agregada; ao escolher uma
+        variante, verá apenas as fotos dela.
       </div>
 
       {(imageUploads.length > 0 || keptExistingImageUrls.length > 0) && (
@@ -712,9 +732,12 @@ export function ProductForm({
       <div className="space-y-4 rounded-2xl border border-border bg-card/60 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-foreground">Variantes vendáveis</p>
+            <p className="text-sm font-semibold text-foreground">
+              Variantes vendáveis
+            </p>
             <p className="text-xs text-muted-foreground">
-              Cadastre combinações de atributos, cada uma com preço, estoque e galeria próprios.
+              Cadastre combinações de atributos, cada uma com preço, estoque e
+              galeria próprios.
             </p>
           </div>
           <Button type="button" variant="secondary" onClick={addVariant}>
@@ -725,9 +748,13 @@ export function ProductForm({
 
         {variants.length === 0 && (
           <div className="rounded-xl border border-dashed border-border bg-muted/40 p-5 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Nenhuma variante criada ainda.</p>
+            <p className="font-medium text-foreground">
+              Nenhuma variante criada ainda.
+            </p>
             <p className="mt-1 leading-relaxed">
-              Use o botão acima para adicionar a primeira combinação vendável. Você poderá definir SKU, atributos, preço, estoque e fotos específicas para cada uma.
+              Use o botão acima para adicionar a primeira combinação vendável.
+              Você poderá definir SKU, atributos, preço, estoque e fotos
+              específicas para cada uma.
             </p>
           </div>
         )}
@@ -745,7 +772,8 @@ export function ProductForm({
                     Variante {index + 1}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Defina aqui a combinação vendável que aparecerá para o cliente.
+                    Defina aqui a combinação vendável que aparecerá para o
+                    cliente.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -814,7 +842,11 @@ export function ProductForm({
                   type="checkbox"
                   checked={variant.inStock}
                   onChange={(event) =>
-                    updateVariant(variant.tempId, "inStock", event.target.checked)
+                    updateVariant(
+                      variant.tempId,
+                      "inStock",
+                      event.target.checked,
+                    )
                   }
                 />
                 Variante disponível para venda
@@ -879,14 +911,17 @@ export function ProductForm({
                   <div>
                     <p className="text-sm font-medium">Galeria da variante</p>
                     <p className="text-xs text-muted-foreground">
-                      Essas imagens aparecem quando o cliente seleciona esta combinação.
+                      Essas imagens aparecem quando o cliente seleciona esta
+                      combinação.
                     </p>
                   </div>
                   <Input
                     type="file"
                     accept="image/*"
                     multiple
-                    onChange={(event) => addVariantImages(variant.tempId, event.target.files)}
+                    onChange={(event) =>
+                      addVariantImages(variant.tempId, event.target.files)
+                    }
                     className="max-w-sm"
                   />
                 </div>
@@ -902,10 +937,17 @@ export function ProductForm({
                           key={`${variant.tempId}-${url}`}
                           className="relative aspect-square overflow-hidden rounded-md border border-border"
                         >
-                          <Image src={url} alt="Imagem da variante" fill className="object-cover" />
+                          <Image
+                            src={url}
+                            alt="Imagem da variante"
+                            fill
+                            className="object-cover"
+                          />
                           <button
                             type="button"
-                            onClick={() => removeVariantExistingImage(variant.tempId, url)}
+                            onClick={() =>
+                              removeVariantExistingImage(variant.tempId, url)
+                            }
                             className="absolute right-1 top-1 inline-flex size-6 items-center justify-center rounded-full bg-black/60 text-white"
                             aria-label="Remover imagem da variante"
                           >
@@ -936,7 +978,9 @@ export function ProductForm({
                           />
                           <button
                             type="button"
-                            onClick={() => removeVariantUpload(variant.tempId, uploadIndex)}
+                            onClick={() =>
+                              removeVariantUpload(variant.tempId, uploadIndex)
+                            }
                             className="absolute right-1 top-1 inline-flex size-6 items-center justify-center rounded-full bg-black/60 text-white"
                             aria-label="Remover nova imagem da variante"
                           >
