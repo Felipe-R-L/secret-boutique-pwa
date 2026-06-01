@@ -190,7 +190,7 @@ export async function getCatalogData() {
   const settings = settingsResult.data as StoreSettingsRow | null;
   const featuredProducts = productsWithMetrics
     .filter((product) => product.is_featured)
-    .slice(0, 3);
+    .slice(0, 8);
 
   return {
     products: productsWithMetrics,

@@ -12,6 +12,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import Link from "next/link";
 
 export const metadata = {
@@ -63,7 +64,17 @@ export default function ComoFuncionaPage() {
       <main>
         {/* Hero */}
         <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-pastel-rose/20 via-background to-pastel-lavender/20" />
+          {/* Header background image (Unsplash — uso livre) */}
+          <Image
+            src="https://images.unsplash.com/photo-1748543668676-ea8241cb3886?w=1600&q=80&auto=format&fit=crop"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+          {/* Readability overlay — strongest behind the centered text */}
+          <div className="absolute inset-0 bg-gradient-to-b from-background/75 via-background/88 to-background/72" />
           {/* Decorative blobs */}
           <div className="absolute -left-20 -top-20 size-64 rounded-full bg-pastel-rose/15 blur-3xl" />
           <div className="absolute -bottom-20 -right-20 size-64 rounded-full bg-pastel-lavender/15 blur-3xl" />
@@ -170,9 +181,9 @@ export default function ComoFuncionaPage() {
                     className="text-sm leading-relaxed text-muted-foreground"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    A retirada funciona todos os dias, incluindo finais de semana
-                    e feriados. Basta apresentar seu código de pedido — nenhum
-                    documento é necessário.
+                    A retirada funciona todos os dias, incluindo finais de
+                    semana e feriados. Basta apresentar seu código de pedido —
+                    nenhum documento é necessário.
                   </p>
                 </div>
               </div>

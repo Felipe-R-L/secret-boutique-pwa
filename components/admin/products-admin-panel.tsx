@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import { Plus, Star, Tags } from "lucide-react";
 import { ProductForm } from "@/components/admin/product-form";
+import { ProductImport } from "@/components/admin/product-import";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -176,28 +177,31 @@ export function ProductsAdminPanel({
           </p>
         </div>
 
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="size-4" />
-              Novo produto
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
-            <DialogHeader>
-              <DialogTitle>Novo produto</DialogTitle>
-              <DialogDescription>
-                Preencha os dados do produto e, se necessário, crie variantes
-                com SKU, preço, estoque e galeria próprios.
-              </DialogDescription>
-            </DialogHeader>
-            <ProductForm
-              mode="create"
-              categories={sortedCategories}
-              onSaved={() => setCreateOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <ProductImport categories={sortedCategories} />
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="size-4" />
+                Novo produto
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
+              <DialogHeader>
+                <DialogTitle>Novo produto</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados do produto e, se necessário, crie variantes
+                  com SKU, preço, estoque e galeria próprios.
+                </DialogDescription>
+              </DialogHeader>
+              <ProductForm
+                mode="create"
+                categories={sortedCategories}
+                onSaved={() => setCreateOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {feedback && (

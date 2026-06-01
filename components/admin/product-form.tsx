@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import Image from "next/image";
-import { Plus, Sparkles, X } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Plus, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { upsertProduct } from "@/lib/actions/products";
+import {
+  GalleryEditor,
+  type GalleryItem,
+} from "@/components/admin/gallery-editor";
 
 type SpecItem = {
   key: string;
@@ -26,11 +29,6 @@ type VariantFormValue = {
   attributes: SpecItem[];
 };
 
-type UploadAsset = {
-  file: File;
-  previewUrl: string;
-};
-
 type VariantDraft = {
   tempId: string;
   id?: string;
@@ -41,8 +39,7 @@ type VariantDraft = {
   inStock: boolean;
   isDefault: boolean;
   attributes: SpecItem[];
-  existingImageUrls: string[];
-  imageUploads: UploadAsset[];
+  images: GalleryItem[];
 };
 
 type ProductFormValue = {
@@ -64,15 +61,20 @@ function emptySpec(): SpecItem {
   return { key: "", value: "" };
 }
 
-function createUploadAssets(files: FileList | File[]): UploadAsset[] {
-  return Array.from(files).map((file) => ({
-    file,
-    previewUrl: URL.createObjectURL(file),
-  }));
+function urlsToGalleryItems(urls: string[]): GalleryItem[] {
+  return urls
+    .filter(Boolean)
+    .map((url) => ({
+      id: crypto.randomUUID(),
+      kind: "existing" as const,
+      url,
+    }));
 }
 
-function revokeUploadAssets(assets: UploadAsset[]) {
-  assets.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
+function revokeGallery(items: GalleryItem[]) {
+  items.forEach((item) => {
+    if (item.kind === "upload") URL.revokeObjectURL(item.previewUrl);
+  });
 }
 
 function createEmptyVariantDraft(index = 0): VariantDraft {
@@ -85,8 +87,7 @@ function createEmptyVariantDraft(index = 0): VariantDraft {
     inStock: true,
     isDefault: index === 0,
     attributes: [emptySpec()],
-    existingImageUrls: [],
-    imageUploads: [],
+    images: [],
   };
 }
 
@@ -104,8 +105,7 @@ function createVariantDraft(
     inStock: value.inStock,
     isDefault: value.isDefault ?? index === 0,
     attributes: value.attributes.length ? value.attributes : [emptySpec()],
-    existingImageUrls: value.images?.filter(Boolean) ?? [],
-    imageUploads: [],
+    images: urlsToGalleryItems(value.images ?? []),
   };
 }
 
@@ -114,7 +114,7 @@ function toStoragePath(name: string, fileName: string) {
   const slug = name
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")
     .slice(0, 60);
@@ -153,13 +153,14 @@ export function ProductForm({
   const [specs, setSpecs] = useState<SpecItem[]>(
     initialValue?.specs?.length ? initialValue.specs : [emptySpec()],
   );
-  const [imageUploads, setImageUploads] = useState<UploadAsset[]>([]);
-  const [keptExistingImageUrls, setKeptExistingImageUrls] = useState<string[]>(
-    initialValue?.imageUrls?.length
-      ? initialValue.imageUrls.filter(Boolean)
-      : initialValue?.imageUrl
-        ? [initialValue.imageUrl]
-        : [],
+  const [productImages, setProductImages] = useState<GalleryItem[]>(() =>
+    urlsToGalleryItems(
+      initialValue?.imageUrls?.length
+        ? initialValue.imageUrls
+        : initialValue?.imageUrl
+          ? [initialValue.imageUrl]
+          : [],
+    ),
   );
   const [variants, setVariants] = useState<VariantDraft[]>(
     initialValue?.variants?.length
@@ -168,33 +169,19 @@ export function ProductForm({
   );
   const [message, setMessage] = useState("");
 
-  const previewUrls = useMemo(
-    () => imageUploads.map((upload) => upload.previewUrl),
-    [imageUploads],
-  );
   const variantCount = variants.length;
 
+  // Revoke object URLs of any pending uploads when the form unmounts.
+  const galleriesRef = useRef({ productImages, variants });
+  galleriesRef.current = { productImages, variants };
   useEffect(() => {
     return () => {
-      revokeUploadAssets(imageUploads);
-      variants.forEach((variant) => revokeUploadAssets(variant.imageUploads));
+      revokeGallery(galleriesRef.current.productImages);
+      galleriesRef.current.variants.forEach((variant) =>
+        revokeGallery(variant.images),
+      );
     };
-  }, [imageUploads, variants]);
-
-  const removeExistingImage = (url: string) => {
-    setKeptExistingImageUrls((prev) => prev.filter((item) => item !== url));
-  };
-
-  const removeNewImage = (index: number) => {
-    setImageUploads((prev) => {
-      const upload = prev[index];
-      if (upload) {
-        URL.revokeObjectURL(upload.previewUrl);
-      }
-
-      return prev.filter((_, currentIndex) => currentIndex !== index);
-    });
-  };
+  }, []);
 
   const addSpec = () => setSpecs((prev) => [...prev, emptySpec()]);
 
@@ -220,9 +207,7 @@ export function ProductForm({
   const removeVariant = (tempId: string) => {
     setVariants((prev) => {
       const variant = prev.find((item) => item.tempId === tempId);
-      if (variant) {
-        revokeUploadAssets(variant.imageUploads);
-      }
+      if (variant) revokeGallery(variant.images);
 
       const next = prev.filter((item) => item.tempId !== tempId);
       if (next.length === 1) {
@@ -234,21 +219,13 @@ export function ProductForm({
 
   const updateVariant = (
     tempId: string,
-    field: keyof Omit<
-      VariantDraft,
-      "tempId" | "attributes" | "existingImageUrls" | "imageUploads"
-    >,
+    field: keyof Omit<VariantDraft, "tempId" | "attributes" | "images">,
     value: string | boolean,
   ) => {
     setVariants((prev) =>
-      prev.map((variant) => {
-        if (variant.tempId !== tempId) return variant;
-
-        return {
-          ...variant,
-          [field]: value,
-        };
-      }),
+      prev.map((variant) =>
+        variant.tempId === tempId ? { ...variant, [field]: value } : variant,
+      ),
     );
   };
 
@@ -258,6 +235,14 @@ export function ProductForm({
         ...variant,
         isDefault: variant.tempId === tempId,
       })),
+    );
+  };
+
+  const setVariantImages = (tempId: string, images: GalleryItem[]) => {
+    setVariants((prev) =>
+      prev.map((variant) =>
+        variant.tempId === tempId ? { ...variant, images } : variant,
+      ),
     );
   };
 
@@ -311,74 +296,26 @@ export function ProductForm({
     );
   };
 
-  const addVariantImages = (tempId: string, files: FileList | null) => {
-    if (!files || files.length === 0) return;
-
-    const uploads = createUploadAssets(files);
-    setVariants((prev) =>
-      prev.map((variant) =>
-        variant.tempId === tempId
-          ? {
-              ...variant,
-              imageUploads: [...variant.imageUploads, ...uploads],
-            }
-          : variant,
-      ),
-    );
-  };
-
-  const removeVariantExistingImage = (tempId: string, url: string) => {
-    setVariants((prev) =>
-      prev.map((variant) =>
-        variant.tempId === tempId
-          ? {
-              ...variant,
-              existingImageUrls: variant.existingImageUrls.filter(
-                (item) => item !== url,
-              ),
-            }
-          : variant,
-      ),
-    );
-  };
-
-  const removeVariantUpload = (tempId: string, index: number) => {
-    setVariants((prev) =>
-      prev.map((variant) => {
-        if (variant.tempId !== tempId) return variant;
-
-        const upload = variant.imageUploads[index];
-        if (upload) {
-          URL.revokeObjectURL(upload.previewUrl);
-        }
-
-        return {
-          ...variant,
-          imageUploads: variant.imageUploads.filter(
-            (_, currentIndex) => currentIndex !== index,
-          ),
-        };
-      }),
-    );
-  };
-
-  const uploadAssets = async (
-    uploads: UploadAsset[],
+  // Uploads pending files (in order) and returns the ordered list of URLs.
+  const resolveGallery = async (
+    gallery: GalleryItem[],
     label: string,
   ): Promise<string[]> => {
-    if (uploads.length === 0) return [];
-
     const supabase = createClient();
-    const uploadedUrls: string[] = [];
+    const urls: string[] = [];
 
-    for (const upload of uploads) {
-      const path = toStoragePath(label || "produto", upload.file.name);
+    for (const item of gallery) {
+      if (item.kind === "existing") {
+        urls.push(item.url);
+        continue;
+      }
 
+      const path = toStoragePath(label || "produto", item.file.name);
       const { error: uploadError } = await supabase.storage
         .from("products")
-        .upload(path, upload.file, {
+        .upload(path, item.file, {
           upsert: false,
-          contentType: upload.file.type || "application/octet-stream",
+          contentType: item.file.type || "application/octet-stream",
         });
 
       if (uploadError) {
@@ -387,32 +324,27 @@ export function ProductForm({
             "Erro no upload: bucket 'products' não encontrado. Rode a migration scripts/004_storage_products_bucket.sql no Supabase SQL Editor.",
           );
         }
-
         throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
       }
 
       const { data } = supabase.storage.from("products").getPublicUrl(path);
-      uploadedUrls.push(data.publicUrl);
+      urls.push(data.publicUrl);
     }
 
-    return uploadedUrls;
+    return urls;
   };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
     setMessage("");
 
     startTransition(async () => {
-      let resolvedImageUrls =
-        keptExistingImageUrls.length > 0 ? [...keptExistingImageUrls] : [];
-
+      let resolvedImageUrls: string[];
       try {
-        const uploadedBaseUrls = await uploadAssets(
-          imageUploads,
+        resolvedImageUrls = await resolveGallery(
+          productImages,
           name || "produto",
         );
-        resolvedImageUrls = [...keptExistingImageUrls, ...uploadedBaseUrls];
       } catch (error) {
         setMessage(
           error instanceof Error
@@ -429,26 +361,6 @@ export function ProductForm({
       const resolvedVariants: VariantFormValue[] = [];
 
       for (const variant of variants) {
-        let uploadedVariantUrls: string[] = [];
-
-        try {
-          uploadedVariantUrls = await uploadAssets(
-            variant.imageUploads,
-            `${name || "produto"}-${variant.label || variant.sku || "variante"}`,
-          );
-        } catch (error) {
-          setMessage(
-            error instanceof Error
-              ? error.message
-              : "Erro no upload das imagens da variante.",
-          );
-          return;
-        }
-
-        const attributes = variant.attributes
-          .map((item) => ({ key: item.key.trim(), value: item.value.trim() }))
-          .filter((item) => item.key.length > 0 && item.value.length > 0);
-
         if (!variant.sku.trim() || !variant.label.trim()) {
           setMessage("Todas as variantes precisam de SKU e nome de exibição.");
           return;
@@ -466,6 +378,25 @@ export function ProductForm({
           return;
         }
 
+        let variantImages: string[];
+        try {
+          variantImages = await resolveGallery(
+            variant.images,
+            `${name || "produto"}-${variant.label || variant.sku || "variante"}`,
+          );
+        } catch (error) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Erro no upload das imagens da variante.",
+          );
+          return;
+        }
+
+        const attributes = variant.attributes
+          .map((item) => ({ key: item.key.trim(), value: item.value.trim() }))
+          .filter((item) => item.key.length > 0 && item.value.length > 0);
+
         resolvedVariants.push({
           id: variant.id,
           sku: variant.sku.trim(),
@@ -474,7 +405,7 @@ export function ProductForm({
           stockQuantity: stockValue,
           inStock: variant.inStock,
           isDefault: variant.isDefault,
-          images: [...variant.existingImageUrls, ...uploadedVariantUrls],
+          images: variantImages,
           attributes,
         });
       }
@@ -511,13 +442,12 @@ export function ProductForm({
         setCategory("");
         setDescription("");
         setCuratorship("");
-        revokeUploadAssets(imageUploads);
-        setImageUploads([]);
-        setKeptExistingImageUrls([]);
+        revokeGallery(productImages);
+        setProductImages([]);
         setIsFeatured(false);
         setInStock(true);
         setSpecs([emptySpec()]);
-        variants.forEach((variant) => revokeUploadAssets(variant.imageUploads));
+        variants.forEach((variant) => revokeGallery(variant.images));
         setVariants([]);
       }
 
@@ -554,13 +484,22 @@ export function ProductForm({
           placeholder="Preço base ou menor preço"
           required
         />
-        <Input
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={(event) =>
-            setImageUploads(createUploadAssets(event.target.files ?? []))
-          }
+      </div>
+
+      {categories.length > 0 && (
+        <datalist id="product-category-options">
+          {categories.map((categoryOption) => (
+            <option key={categoryOption} value={categoryOption} />
+          ))}
+        </datalist>
+      )}
+
+      <div className="rounded-xl border border-border p-3">
+        <GalleryEditor
+          label="Imagens do produto"
+          help="Galeria geral (imagens editoriais). A primeira é a capa exibida no card e na vitrine. Arraste para reordenar ou use o ★ para tornar capa."
+          items={productImages}
+          onChange={setProductImages}
         />
       </div>
 
@@ -589,91 +528,6 @@ export function ProductForm({
           </div>
         </div>
       </div>
-
-      <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3 text-xs text-amber-900">
-        Use a galeria geral para imagens editoriais do produto e cadastre as
-        fotos específicas dentro de cada variante. Na vitrine, sem variante
-        selecionada, o cliente verá a galeria agregada; ao escolher uma
-        variante, verá apenas as fotos dela.
-      </div>
-
-      {(imageUploads.length > 0 || keptExistingImageUrls.length > 0) && (
-        <p className="text-xs text-muted-foreground">
-          {imageUploads.length > 0
-            ? `${imageUploads.length} imagem(ns) selecionada(s) para upload no bucket 'products'.`
-            : `${keptExistingImageUrls.length} imagem(ns) já vinculada(s) a este produto.`}
-        </p>
-      )}
-
-      {keptExistingImageUrls.length > 0 && (
-        <div className="space-y-2 rounded-md border border-border p-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            Imagens atuais
-          </p>
-          <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
-            {keptExistingImageUrls.map((url) => (
-              <div
-                key={url}
-                className="relative aspect-square overflow-hidden rounded-md border border-border"
-              >
-                <Image
-                  src={url}
-                  alt="Imagem atual"
-                  fill
-                  className="object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeExistingImage(url)}
-                  className="absolute right-1 top-1 inline-flex size-6 items-center justify-center rounded-full bg-black/60 text-white"
-                  aria-label="Remover imagem atual"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {previewUrls.length > 0 && (
-        <div className="space-y-2 rounded-md border border-border p-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            Novas imagens selecionadas
-          </p>
-          <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
-            {previewUrls.map((url, index) => (
-              <div
-                key={`${url}-${index}`}
-                className="relative aspect-square overflow-hidden rounded-md border border-border"
-              >
-                <Image
-                  src={url}
-                  alt="Nova imagem"
-                  fill
-                  className="object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeNewImage(index)}
-                  className="absolute right-1 top-1 inline-flex size-6 items-center justify-center rounded-full bg-black/60 text-white"
-                  aria-label="Remover imagem selecionada"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {categories.length > 0 && (
-        <datalist id="product-category-options">
-          {categories.map((categoryOption) => (
-            <option key={categoryOption} value={categoryOption} />
-          ))}
-        </datalist>
-      )}
 
       <textarea
         value={description}
@@ -906,91 +760,13 @@ export function ProductForm({
                 </Button>
               </div>
 
-              <div className="space-y-3 rounded-xl border border-border p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">Galeria da variante</p>
-                    <p className="text-xs text-muted-foreground">
-                      Essas imagens aparecem quando o cliente seleciona esta
-                      combinação.
-                    </p>
-                  </div>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(event) =>
-                      addVariantImages(variant.tempId, event.target.files)
-                    }
-                    className="max-w-sm"
-                  />
-                </div>
-
-                {variant.existingImageUrls.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Imagens atuais da variante
-                    </p>
-                    <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
-                      {variant.existingImageUrls.map((url) => (
-                        <div
-                          key={`${variant.tempId}-${url}`}
-                          className="relative aspect-square overflow-hidden rounded-md border border-border"
-                        >
-                          <Image
-                            src={url}
-                            alt="Imagem da variante"
-                            fill
-                            className="object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeVariantExistingImage(variant.tempId, url)
-                            }
-                            className="absolute right-1 top-1 inline-flex size-6 items-center justify-center rounded-full bg-black/60 text-white"
-                            aria-label="Remover imagem da variante"
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {variant.imageUploads.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Novas imagens da variante
-                    </p>
-                    <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
-                      {variant.imageUploads.map((upload, uploadIndex) => (
-                        <div
-                          key={`${variant.tempId}-${upload.previewUrl}`}
-                          className="relative aspect-square overflow-hidden rounded-md border border-border"
-                        >
-                          <Image
-                            src={upload.previewUrl}
-                            alt="Nova imagem da variante"
-                            fill
-                            className="object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeVariantUpload(variant.tempId, uploadIndex)
-                            }
-                            className="absolute right-1 top-1 inline-flex size-6 items-center justify-center rounded-full bg-black/60 text-white"
-                            aria-label="Remover nova imagem da variante"
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="rounded-xl border border-border p-3">
+                <GalleryEditor
+                  label="Galeria da variante"
+                  help="Essas imagens aparecem quando o cliente seleciona esta combinação. A primeira é a capa da variante."
+                  items={variant.images}
+                  onChange={(next) => setVariantImages(variant.tempId, next)}
+                />
               </div>
             </div>
           ))}

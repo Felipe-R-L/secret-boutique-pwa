@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Product } from "@/lib/store/cart-store";
 import { getPrimaryProductImage } from "@/lib/product-images";
+import { cn } from "@/lib/utils";
 
 interface HeroSectionProps {
   onProductSelect: (product: Product) => void;
@@ -18,6 +20,15 @@ interface HeroSectionProps {
   };
 }
 
+const ROTATE_MS = 4500;
+
+function formatBRL(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+}
+
 export function HeroSection({
   onProductSelect,
   featuredProducts,
@@ -25,7 +36,31 @@ export function HeroSection({
   heroSubtitle,
   stats,
 }: HeroSectionProps) {
-  const heroProduct = featuredProducts[0];
+  const count = featuredProducts.length;
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  // Cycle the featured products through the fixed card slots, carousel-style,
+  // without swapping the whole hero. Pauses while hovered.
+  useEffect(() => {
+    if (count <= 1 || paused) return;
+    const timer = setInterval(
+      () => setActive((current) => (current + 1) % count),
+      ROTATE_MS,
+    );
+    return () => clearInterval(timer);
+  }, [count, paused]);
+
+  useEffect(() => {
+    if (active >= count) setActive(0);
+  }, [active, count]);
+
+  const slotAt = (offset: number) =>
+    count > 0 ? featuredProducts[(active + offset) % count] : undefined;
+
+  const main = slotAt(0);
+  const small1 = count > 1 ? slotAt(1) : undefined;
+  const small2 = count > 2 ? slotAt(2) : undefined;
 
   return (
     <section className="relative overflow-hidden">
@@ -112,84 +147,64 @@ export function HeroSection({
             </div>
           </div>
 
-          {/* Right content - Featured product showcase */}
-          <div className="relative">
+          {/* Right content - Featured product carousel (fixed card slots) */}
+          <div
+            className="relative"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+          >
             {/* Main featured product */}
-            {heroProduct && (
-              <div
-                onClick={() => onProductSelect(heroProduct)}
-                className="group relative cursor-pointer overflow-hidden rounded-3xl bg-card shadow-2xl transition-all duration-500 hover:shadow-3xl"
+            {main && (
+              <button
+                type="button"
+                onClick={() => onProductSelect(main)}
+                className="group block w-full overflow-hidden rounded-3xl bg-card text-left shadow-2xl transition-all duration-500 hover:shadow-3xl"
               >
-                <div className="relative aspect-4/5 md:aspect-3/4 lg:aspect-square">
-                  <Image
-                    src={getPrimaryProductImage(heroProduct)}
-                    alt={heroProduct.name}
-                    fill
-                    className="object-cover transition-transform duration-700 group-hover:scale-105"
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                    priority
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 via-foreground/10 to-transparent" />
-                </div>
-
-                <div className="absolute inset-x-0 bottom-0 p-6 md:p-8">
-                  <span className="mb-2 inline-block rounded-full bg-pastel-rose/90 px-3 py-1 text-xs font-medium text-foreground backdrop-blur-sm">
-                    Em destaque
-                  </span>
-                  <h3 className="font-sans text-xl font-semibold text-background md:text-2xl lg:text-3xl">
-                    {heroProduct.name}
-                  </h3>
-                  <p className="mt-1 font-sans text-2xl font-bold text-background md:text-3xl">
-                    {new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(heroProduct.price)}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Floating product cards */}
-            <div className="absolute -bottom-4 -left-4 hidden w-32 overflow-hidden rounded-2xl bg-card shadow-xl ring-1 ring-border/30 lg:block xl:-left-8 xl:w-40">
-              {featuredProducts[1] && (
-                <div
-                  onClick={() => onProductSelect(featuredProducts[1])}
-                  className="group cursor-pointer"
-                >
-                  <div className="relative aspect-square">
+                <div key={main.id} className="animate-in fade-in duration-700">
+                  <div className="relative aspect-4/5 md:aspect-3/4 lg:aspect-square">
                     <Image
-                      src={getPrimaryProductImage(featuredProducts[1])}
-                      alt={featuredProducts[1].name}
+                      src={getPrimaryProductImage(main)}
+                      alt={main.name}
                       fill
-                      className="object-cover transition-transform duration-500 group-hover:scale-110"
-                      sizes="160px"
+                      className="object-cover transition-transform duration-700 group-hover:scale-105"
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                      priority
                     />
                   </div>
-                  <div className="p-2 xl:p-3">
-                    <p className="truncate text-xs font-medium text-foreground">
-                      {featuredProducts[1].name}
-                    </p>
-                    <p className="font-sans text-sm font-semibold text-foreground">
-                      {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(featuredProducts[1].price)}
-                    </p>
+
+                  {/* Card footer */}
+                  <div className="space-y-2 border-t border-border bg-card p-5 md:p-6">
+                    <span className="inline-block rounded-full bg-pastel-rose/40 px-3 py-1 text-xs font-medium text-foreground">
+                      Em destaque
+                    </span>
+                    <div className="flex items-end justify-between gap-3">
+                      <h3 className="line-clamp-2 font-sans text-xl font-semibold text-foreground md:text-2xl">
+                        {main.name}
+                      </h3>
+                      <p className="shrink-0 font-sans text-2xl font-bold text-foreground md:text-3xl">
+                        {formatBRL(main.price)}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </button>
+            )}
 
-            <div className="absolute -right-4 -top-4 hidden w-28 overflow-hidden rounded-2xl bg-card shadow-xl ring-1 ring-border/30 lg:block xl:-right-8 xl:w-36">
-              {featuredProducts[2] && (
+            {/* Floating card — top right */}
+            {small1 && (
+              <button
+                type="button"
+                onClick={() => onProductSelect(small1)}
+                className="group absolute -top-5 -right-4 z-10 hidden w-28 overflow-hidden rounded-2xl bg-card text-left shadow-xl ring-1 ring-border/30 transition-transform hover:-translate-y-1 lg:block xl:-right-8 xl:w-36"
+              >
                 <div
-                  onClick={() => onProductSelect(featuredProducts[2])}
-                  className="group cursor-pointer"
+                  key={small1.id}
+                  className="animate-in fade-in zoom-in-95 duration-500"
                 >
                   <div className="relative aspect-square">
                     <Image
-                      src={getPrimaryProductImage(featuredProducts[2])}
-                      alt={featuredProducts[2].name}
+                      src={getPrimaryProductImage(small1)}
+                      alt={small1.name}
                       fill
                       className="object-cover transition-transform duration-500 group-hover:scale-110"
                       sizes="144px"
@@ -197,18 +212,68 @@ export function HeroSection({
                   </div>
                   <div className="p-2 xl:p-3">
                     <p className="truncate text-xs font-medium text-foreground">
-                      {featuredProducts[2].name}
+                      {small1.name}
                     </p>
                     <p className="font-sans text-sm font-semibold text-foreground">
-                      {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(featuredProducts[2].price)}
+                      {formatBRL(small1.price)}
                     </p>
                   </div>
                 </div>
-              )}
-            </div>
+              </button>
+            )}
+
+            {/* Floating card — top left */}
+            {small2 && (
+              <button
+                type="button"
+                onClick={() => onProductSelect(small2)}
+                className="group absolute -top-5 -left-4 z-10 hidden w-28 overflow-hidden rounded-2xl bg-card text-left shadow-xl ring-1 ring-border/30 transition-transform hover:-translate-y-1 lg:block xl:-left-8 xl:w-32"
+              >
+                <div
+                  key={small2.id}
+                  className="animate-in fade-in zoom-in-95 duration-500"
+                >
+                  <div className="relative aspect-square">
+                    <Image
+                      src={getPrimaryProductImage(small2)}
+                      alt={small2.name}
+                      fill
+                      className="object-cover transition-transform duration-500 group-hover:scale-110"
+                      sizes="128px"
+                    />
+                  </div>
+                  <div className="p-2 xl:p-3">
+                    <p className="truncate text-xs font-medium text-foreground">
+                      {small2.name}
+                    </p>
+                    <p className="font-sans text-sm font-semibold text-foreground">
+                      {formatBRL(small2.price)}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            )}
+
+            {/* Carousel indicators */}
+            {count > 1 && (
+              <div className="mt-6 flex items-center justify-center gap-2">
+                {featuredProducts.map((product, index) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    aria-label={`Ver destaque ${index + 1}`}
+                    aria-current={index === active}
+                    onClick={() => setActive(index)}
+                    className={cn(
+                      "h-2 rounded-full transition-all",
+                      index === active
+                        ? "w-6 bg-foreground"
+                        : "w-2 bg-foreground/25 hover:bg-foreground/40",
+                    )}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

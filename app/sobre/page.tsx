@@ -2,6 +2,7 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { Lock, Heart, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import Link from "next/link";
 
 export const metadata = {
@@ -42,7 +43,17 @@ export default function SobrePage() {
       <main>
         {/* Hero */}
         <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-pastel-rose/15 via-background to-pastel-sage/15" />
+          {/* Header background image (Unsplash — uso livre) */}
+          <Image
+            src="https://images.unsplash.com/photo-1617055407123-3d7130c1f940?w=1600&q=80&auto=format&fit=crop"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+          {/* Readability overlay — strongest behind the centered text */}
+          <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/85 to-background/70" />
           <div className="absolute left-1/2 top-0 size-96 -translate-x-1/2 rounded-full bg-pastel-lavender/10 blur-3xl" />
 
           <div className="relative mx-auto max-w-3xl px-4 py-20 text-center md:px-6 md:py-32">
@@ -67,18 +78,17 @@ export default function SobrePage() {
             >
               A <strong>Secret Boutique</strong> nasceu dentro do{" "}
               <strong>Dallas Motel</strong>, em Pitangueiras, com uma missão
-              simples e poderosa: trazer{" "}
-              <em>bem-estar sexual e autocuidado</em> com total privacidade e sem
-              julgamentos para qualquer pessoa.
+              simples e poderosa: trazer <em>bem-estar sexual e autocuidado</em>{" "}
+              com total privacidade e sem julgamentos para qualquer pessoa.
             </p>
             <p
               className="text-base leading-relaxed text-muted-foreground md:text-lg"
               style={{ fontFamily: "Inter, sans-serif" }}
             >
               Acreditamos que cuidar de si é um ato de amor. Que explorar o
-              prazer é natural, saudável e não deve ser motivo de vergonha.
-              Por isso criamos um espaço onde você pode escolher seus produtos
-              com calma, sem pressa e sem olhares.
+              prazer é natural, saudável e não deve ser motivo de vergonha. Por
+              isso criamos um espaço onde você pode escolher seus produtos com
+              calma, sem pressa e sem olhares.
             </p>
             <p
               className="text-base leading-relaxed text-muted-foreground md:text-lg"
