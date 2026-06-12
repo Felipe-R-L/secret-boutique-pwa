@@ -68,6 +68,8 @@ export const productMutationSchema = z
     curatorship: z.string().trim().max(6000).optional(),
     category: z.string().trim().min(1).max(80),
     isFeatured: z.coerce.boolean().default(false),
+    // Conteúdo adulto: ativado por padrão; o admin desmarca nos itens SFW.
+    isAdult: z.coerce.boolean().default(true),
     inStock: z.coerce.boolean().default(true),
     imageUrl: z.string().url().optional(),
     imageUrls: z.array(z.string().url()).max(20).optional(),

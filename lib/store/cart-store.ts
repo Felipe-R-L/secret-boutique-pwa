@@ -38,6 +38,7 @@ export interface Product {
   inStock?: boolean;
   in_stock?: boolean;
   is_featured?: boolean;
+  is_adult?: boolean;
   stock_quantity?: number;
   variants?: ProductVariant[];
 }

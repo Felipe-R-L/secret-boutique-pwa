@@ -6,6 +6,8 @@ import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Toaster } from "sonner";
 import { CartHydration } from "@/components/cart-hydration";
 import { CartBar } from "@/components/cart-bar";
+import { AgeGate } from "@/components/age-gate";
+import { RoomParamCapture } from "@/components/room-param-capture";
 import "./globals.css";
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -120,8 +122,10 @@ export default function RootLayout({
       </head>
       <body className={`font-sans antialiased`}>
         <CartHydration />
+        <RoomParamCapture />
         {children}
         <CartBar />
+        <AgeGate />
         <Toaster
           position="bottom-center"
           mobileOffset={{ bottom: 88 }}

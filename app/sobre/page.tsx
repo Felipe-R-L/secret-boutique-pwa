@@ -16,7 +16,7 @@ const values = [
     icon: Lock,
     title: "Privacidade Total",
     description:
-      "Não armazenamos seus dados pessoais. Sua identidade é protegida do início ao fim.",
+      "Pedimos apenas o essencial e nunca vendemos seus dados. Sua identidade é protegida do início ao fim.",
     color: "from-pastel-lavender/40 to-pastel-lavender/10",
   },
   {
@@ -94,10 +94,11 @@ export default function SobrePage() {
               className="text-base leading-relaxed text-muted-foreground md:text-lg"
               style={{ fontFamily: "Inter, sans-serif" }}
             >
-              Aqui, não criamos cadastro nem guardamos seus dados. O email e o
-              CPF informados no pagamento vão direto para o gateway que
-              processa o PIX — nada fica armazenado conosco. Você compra,
-              recebe um código, e retira quando quiser — simples assim. Porque
+              Aqui, não criamos cadastro. Pedimos só o essencial: nome e email
+              para registrar o pedido e enviar o seu comprovante — e o CPF,
+              exigido por lei para o PIX, vai direto para o processador de
+              pagamento, sem ficar guardado conosco. Você compra, recebe um
+              código, e retira quando quiser — simples assim. Porque
               privacidade não é um luxo, é um direito.
             </p>
           </div>

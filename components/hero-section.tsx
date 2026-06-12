@@ -181,30 +181,34 @@ export function HeroSection({
             onMouseEnter={() => setPaused(true)}
             onMouseLeave={() => setPaused(false)}
           >
-            {/* Palco do card: placa deslocada com leve rotação */}
-            <div
-              aria-hidden
-              className="absolute -inset-2 -rotate-2 rounded-[2rem] bg-gradient-to-br from-pastel-rose/40 via-pastel-lavender/30 to-pastel-peach/40 md:-inset-3"
-            />
+            {count > 0 && (
+              <>
+                {/* Palco do card: placa deslocada com leve rotação */}
+                <div
+                  aria-hidden
+                  className="absolute -inset-2 -rotate-2 rounded-[2rem] bg-gradient-to-br from-pastel-rose/40 via-pastel-lavender/30 to-pastel-peach/40 md:-inset-3"
+                />
 
-            {/* Padrão de pontos decorativo */}
-            <svg
-              aria-hidden
-              className="absolute -bottom-6 -left-5 size-28 text-primary/15"
-              viewBox="0 0 112 112"
-            >
-              <defs>
-                <pattern
-                  id="hero-dots"
-                  width="16"
-                  height="16"
-                  patternUnits="userSpaceOnUse"
+                {/* Padrão de pontos decorativo */}
+                <svg
+                  aria-hidden
+                  className="absolute -bottom-6 -left-5 size-28 text-primary/15"
+                  viewBox="0 0 112 112"
                 >
-                  <circle cx="2" cy="2" r="2" fill="currentColor" />
-                </pattern>
-              </defs>
-              <rect width="112" height="112" fill="url(#hero-dots)" />
-            </svg>
+                  <defs>
+                    <pattern
+                      id="hero-dots"
+                      width="16"
+                      height="16"
+                      patternUnits="userSpaceOnUse"
+                    >
+                      <circle cx="2" cy="2" r="2" fill="currentColor" />
+                    </pattern>
+                  </defs>
+                  <rect width="112" height="112" fill="url(#hero-dots)" />
+                </svg>
+              </>
+            )}
 
             {count > 0 && (
               <Carousel

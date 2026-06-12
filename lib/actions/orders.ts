@@ -113,7 +113,7 @@ export async function updateOrderStatus(input: unknown) {
   // Fetch current order to validate transition
   const { data: currentOrder } = await supabase
     .from("orders")
-    .select("id,status")
+    .select("id,status,delivery_method")
     .eq("id", parsed.data.id)
     .maybeSingle();
 
@@ -128,6 +128,11 @@ export async function updateOrderStatus(input: unknown) {
     const validTransitions: Record<string, string[]> = {
       PAID: ["PREPARING"],
       PREPARING: ["READY_FOR_PICKUP"],
+      // Entrega no quarto dispensa o código de retirada: o funcionário
+      // confirma a entrega direto — o código só protege retiradas na portaria.
+      ...(currentOrder.delivery_method === "ROOM_DELIVERY"
+        ? { READY_FOR_PICKUP: ["COMPLETED"] }
+        : {}),
     };
     const allowed = validTransitions[currentOrder.status] ?? [];
     if (!allowed.includes(newStatus)) {

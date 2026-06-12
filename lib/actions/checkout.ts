@@ -224,14 +224,38 @@ export async function checkOrderStatus(orderId: unknown) {
           );
         }
 
-        await supabase
+        // Transição condicionada a PENDING: se o webhook chegou primeiro,
+        // zero linhas mudam e os efeitos colaterais não rodam de novo.
+        const { data: updatedRows } = await supabase
           .from("orders")
           .update({
             status: "PAID",
             pickup_code: pickupCode,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", data.id);
+          .eq("id", data.id)
+          .eq("status", "PENDING")
+          .select("id");
+
+        if ((updatedRows?.length ?? 0) === 0) {
+          // Outro caminho (webhook) já confirmou — devolve o estado real do
+          // banco para não exibir um código diferente do gravado.
+          const { data: fresh } = await supabase
+            .from("orders")
+            .select("id,status,total_amount,pickup_code")
+            .eq("id", data.id)
+            .maybeSingle();
+
+          return {
+            ok: true as const,
+            data: {
+              id: data.id,
+              status: fresh?.status ?? "PAID",
+              totalAmount: Number(fresh?.total_amount ?? data.total_amount),
+              pickupCode: fresh?.pickup_code ?? null,
+            },
+          };
+        }
 
         try {
           await decrementOrderStockByVariants(supabase, data.id);

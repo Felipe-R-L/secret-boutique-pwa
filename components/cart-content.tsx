@@ -21,6 +21,7 @@ import {
 import { getPrimaryProductImage } from "@/lib/product-images";
 import { hasProductVariants } from "@/lib/product-variants";
 import { showAddedToCartToast } from "@/components/cart-toast";
+import { useAgeModeStore } from "@/lib/store/age-mode-store";
 
 interface CartContentProps {
   products: Product[];
@@ -30,6 +31,7 @@ export function CartContent({ products }: CartContentProps) {
   const items = useCartStore((state) => state.items);
   const getTotal = useCartStore((state) => state.getTotal);
   const addItem = useCartStore((state) => state.addItem);
+  const isAdultMode = useAgeModeStore((state) => state.mode === "adult");
 
   const formatPrice = (price: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -51,14 +53,15 @@ export function CartContent({ products }: CartContentProps) {
       (product) =>
         !inCart.has(product.id) &&
         (product.inStock ?? true) &&
-        !hasProductVariants(product),
+        !hasProductVariants(product) &&
+        (isAdultMode || !(product.is_adult ?? true)),
     );
 
     return [
       ...pool.filter((product) => cartCategories.has(product.category)),
       ...pool.filter((product) => !cartCategories.has(product.category)),
     ].slice(0, 4);
-  }, [products, items]);
+  }, [products, items, isAdultMode]);
 
   return (
     <div className="min-h-screen bg-background">

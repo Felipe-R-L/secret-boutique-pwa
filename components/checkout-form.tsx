@@ -2,12 +2,22 @@
 
 import React from "react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { QrCode, CheckCircle, Shield, AlertCircle } from "lucide-react";
+import { QrCode, CheckCircle, Shield, AlertCircle, DoorOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart-store";
 import { initializeCheckout } from "@/lib/actions/checkout";
@@ -32,7 +42,24 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [roomNumber, setRoomNumber] = useState("");
-  const [pickupAtLobby, setPickupAtLobby] = useState(false);
+  // Default: retirada na recepção. O QR code do quarto (?quarto=N) muda
+  // para entrega no quarto com o número já preenchido.
+  const [pickupAtLobby, setPickupAtLobby] = useState(true);
+  const [roomFromQr, setRoomFromQr] = useState(false);
+  const [confirmRoomOpen, setConfirmRoomOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedRoom = sessionStorage.getItem("sb-room")?.trim();
+      if (savedRoom) {
+        setRoomNumber(savedRoom);
+        setPickupAtLobby(false);
+        setRoomFromQr(true);
+      }
+    } catch {
+      // armazenamento bloqueado — mantém o default (recepção)
+    }
+  }, []);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [cpf, setCpf] = useState("");
@@ -152,7 +179,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
           <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
             <label htmlFor="pickup-toggle" className="text-sm text-foreground">
-              Motel Pickup (retirar na portaria)
+              Retirar na recepção (portaria)
             </label>
             <Switch
               id="pickup-toggle"
@@ -162,32 +189,93 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
           </div>
 
           {!pickupAtLobby && (
-            <div className="space-y-2">
+            <div className="space-y-3 rounded-xl border border-border bg-card p-4 text-center">
               <label
                 htmlFor="room-number"
-                className="text-sm text-muted-foreground"
+                className="block text-sm font-medium text-foreground"
               >
                 Número do quarto
               </label>
-              <Input
-                id="room-number"
-                type="text"
-                placeholder="Ex: 101"
-                value={roomNumber}
-                onChange={(e) => setRoomNumber(e.target.value)}
-                className="h-12 rounded-xl"
-              />
+              <div className="flex justify-center">
+                <Input
+                  id="room-number"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000"
+                  maxLength={10}
+                  value={roomNumber}
+                  onChange={(e) => {
+                    setRoomNumber(e.target.value);
+                    setRoomFromQr(false);
+                  }}
+                  className="size-24 rounded-2xl border-2 text-center font-sans !text-3xl font-bold tracking-wider md:size-28"
+                />
+              </div>
+              <p
+                className="text-xs text-muted-foreground"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                {roomFromQr
+                  ? "Quarto identificado pelo QR Code — confira se é o seu."
+                  : "Confira o número na porta ou na chave do quarto."}
+              </p>
             </div>
           )}
 
           <Button
             type="button"
             className="w-full rounded-xl"
-            onClick={() => setStep(2)}
+            onClick={() => {
+              if (pickupAtLobby) {
+                setStep(2);
+              } else {
+                setConfirmRoomOpen(true);
+              }
+            }}
             disabled={!canGoToStepTwo}
           >
             Continuar
           </Button>
+
+          {/* Confirmação do quarto — evita pedido entregue na porta errada */}
+          <AlertDialog
+            open={confirmRoomOpen}
+            onOpenChange={setConfirmRoomOpen}
+          >
+            <AlertDialogContent className="max-w-xs rounded-3xl text-center">
+              <AlertDialogHeader className="items-center">
+                <div className="flex size-12 items-center justify-center rounded-full bg-pastel-lavender/30">
+                  <DoorOpen className="size-6 text-primary" />
+                </div>
+                <AlertDialogTitle>Confirme o quarto</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div>
+                    <span className="block font-sans text-4xl font-bold tracking-wider text-foreground">
+                      {roomNumber.trim()}
+                    </span>
+                    <span
+                      className="mt-2 block text-sm"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Seu pedido será entregue neste quarto. O número está
+                      correto?
+                    </span>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex-col gap-2 sm:flex-col">
+                <AlertDialogAction
+                  className="w-full rounded-full"
+                  onClick={() => setStep(2)}
+                >
+                  Sim, é esse
+                </AlertDialogAction>
+                <AlertDialogCancel className="w-full rounded-full">
+                  Corrigir número
+                </AlertDialogCancel>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 

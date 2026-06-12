@@ -106,7 +106,7 @@ export default async function AdminProductsPage() {
   const { data: products, error: productsError } = await supabase
     .from("products")
     .select(
-      "id,name,price,description,curatorship,category,in_stock,stock_quantity,is_featured,images,image_url,specs,variants,created_at",
+      "id,name,price,description,curatorship,category,in_stock,stock_quantity,is_featured,is_adult,images,image_url,specs,variants,created_at",
     )
     .order("created_at", { ascending: false });
 
@@ -139,6 +139,7 @@ export default async function AdminProductsPage() {
       category: product.category,
       inStock: product.in_stock ?? true,
       isFeatured: product.is_featured ?? false,
+      isAdult: product.is_adult ?? true,
       stockQuantity: product.stock_quantity ?? 0,
       imageUrl: product.image_url ?? undefined,
       imageUrls: parseImageUrls(product.images),

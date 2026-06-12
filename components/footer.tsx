@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Shield, Truck, Lock, Heart } from "lucide-react";
+import { Shield, Package, Lock, Heart } from "lucide-react";
 
 const navLinks = [
   { href: "/", label: "Loja" },
   { href: "/como-funciona", label: "Como Funciona" },
   { href: "/sobre", label: "Sobre Nós" },
+  { href: "/privacidade", label: "Privacidade" },
 ];
 
 export function Footer() {
@@ -15,10 +16,10 @@ export function Footer() {
         <div className="grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
           <div className="flex flex-col items-center gap-3 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl bg-pastel-peach/40">
-              <Truck className="size-5 text-foreground/70" />
+              <Package className="size-5 text-foreground/70" />
             </div>
             <div>
-              <h4 className="font-medium text-foreground">Entrega Discreta</h4>
+              <h4 className="font-medium text-foreground">Embalagem Discreta</h4>
               <p
                 className="mt-1 text-xs text-muted-foreground"
                 style={{ fontFamily: "Inter, sans-serif" }}

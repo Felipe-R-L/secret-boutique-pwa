@@ -27,6 +27,7 @@ export type AdminProductCard = {
   category: string;
   inStock: boolean;
   isFeatured: boolean;
+  isAdult: boolean;
   stockQuantity: number;
   imageUrl?: string;
   imageUrls?: string[];
@@ -261,6 +262,15 @@ export function ProductsAdminPanel({
                       Destaque
                     </span>
                   )}
+                  <span
+                    className={
+                      product.isAdult
+                        ? "rounded-full bg-pastel-rose/30 px-2 py-1 text-foreground"
+                        : "rounded-full bg-pastel-sage/30 px-2 py-1 text-foreground"
+                    }
+                  >
+                    {product.isAdult ? "+18" : "Livre"}
+                  </span>
                 </div>
               </div>
 
@@ -298,6 +308,7 @@ export function ProductsAdminPanel({
                         curatorship: product.curatorship ?? "",
                         inStock: product.inStock,
                         isFeatured: product.isFeatured,
+                        isAdult: product.isAdult,
                         imageUrl: product.imageUrl,
                         imageUrls: product.imageUrls,
                         specs: product.specs,

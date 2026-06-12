@@ -83,6 +83,7 @@ export async function upsertProduct(input: unknown) {
     curatorship: parsed.data.curatorship?.trim() || null,
     category: parsed.data.category,
     is_featured: parsed.data.isFeatured,
+    is_adult: parsed.data.isAdult,
     in_stock: aggregateInStock,
     specs: specsJson,
     images: aggregateImages,
@@ -172,6 +173,7 @@ const IMPORT_FIELD_ALIASES: Record<string, string[]> = {
   image: ["imagem", "image", "url", "imagem_url", "image_url", "foto"],
   quantity: ["quantidade", "quantity", "qtd", "qty", "estoque"],
   featured: ["destaque", "featured", "is_featured"],
+  adult: ["adulto", "adult", "nsfw", "is_adult", "+18", "18+"],
   curatorship: ["curadoria", "curatorship"],
   variant: ["variante", "variacao", "variação", "variant"],
   attribute: ["atributo", "attribute"],
@@ -299,6 +301,9 @@ export async function importProducts(
     const category = importField(first, "category");
     const description = importField(first, "description");
     const isFeatured = parseBoolish(importField(first, "featured"));
+    // Coluna "adulto" opcional no CSV; sem ela, segue o padrão (+18).
+    const adultRaw = importField(first, "adult");
+    const isAdult = adultRaw === "" ? true : parseBoolish(adultRaw);
     const curatorship = importField(first, "curatorship") || undefined;
     const groupImage = items
       .map((item) => resolveImage(item.record))
@@ -356,6 +361,7 @@ export async function importProducts(
         description,
         category,
         isFeatured,
+        isAdult,
         inStock: true,
         ...(curatorship ? { curatorship } : {}),
         ...(groupImage
@@ -403,6 +409,7 @@ export async function importProducts(
         description,
         category,
         isFeatured,
+        isAdult,
         inStock: true,
         ...(curatorship ? { curatorship } : {}),
         ...(groupImage
@@ -431,6 +438,7 @@ export async function importProducts(
       description,
       category,
       isFeatured,
+      isAdult,
       inStock: true,
       ...(curatorship ? { curatorship } : {}),
       ...(groupImage ? { imageUrl: groupImage, imageUrls: [groupImage] } : {}),

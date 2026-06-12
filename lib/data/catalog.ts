@@ -122,6 +122,7 @@ function mapProduct(row: ProductRow): Product {
     inStock: row.in_stock ?? true,
     in_stock: row.in_stock ?? true,
     is_featured: row.is_featured ?? false,
+    is_adult: row.is_adult ?? true,
     stock_quantity: row.stock_quantity ?? 0,
     variants: parseProductVariants(row.variants),
   };
@@ -130,11 +131,11 @@ function mapProduct(row: ProductRow): Product {
 export async function getCatalogData() {
   const supabase = await createClient();
 
-  const [productsResult, settingsResult] = await Promise.all([
+  let [productsResult, settingsResult] = await Promise.all([
     supabase
       .from("products")
       .select(
-        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,variants,created_at,updated_at",
+        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,is_adult,variants,created_at,updated_at",
       )
       .eq("in_stock", true)
       .order("created_at", { ascending: false }),
@@ -144,6 +145,20 @@ export async function getCatalogData() {
       .eq("id", 1)
       .maybeSingle(),
   ]);
+
+  // Fallback de migração: se a coluna is_adult ainda não existir no banco
+  // (scripts/010 não aplicado), refaz a query sem ela — tudo vira +18.
+  if (productsResult.error?.message?.includes("is_adult")) {
+    productsResult = (await supabase
+      .from("products")
+      .select(
+        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,variants,created_at,updated_at",
+      )
+      .eq("in_stock", true)
+      .order("created_at", {
+        ascending: false,
+      })) as typeof productsResult;
+  }
 
   const products = (productsResult.data ?? []).map(mapProduct);
 

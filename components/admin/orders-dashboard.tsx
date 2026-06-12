@@ -272,6 +272,10 @@ export function OrdersDashboard({
           <Search className="size-4" />
           Finalizar pedido por código
         </h3>
+        <p className="text-xs text-muted-foreground">
+          Para retiradas na portaria. Entregas no quarto são finalizadas
+          direto no card do pedido, sem código.
+        </p>
         <div className="flex gap-2">
           <Input
             value={pickupCodeInput}
@@ -326,6 +330,11 @@ export function OrdersDashboard({
           const config = statusConfig[order.status] ?? statusConfig.PENDING;
           const StatusIcon = config.icon;
           const isLoading = loadingActions.has(order.id);
+          const isRoomDelivery = order.delivery_method === "ROOM_DELIVERY";
+          const statusLabel =
+            order.status === "READY_FOR_PICKUP" && isRoomDelivery
+              ? "Pronto p/ Entrega"
+              : config.label;
 
           return (
             <article
@@ -353,7 +362,7 @@ export function OrdersDashboard({
                     className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${config.color}`}
                   >
                     <StatusIcon className="size-3" />
-                    {config.label}
+                    {statusLabel}
                   </span>
                   {order.pickup_code && (
                     <span className="font-mono text-xs tracking-wider text-muted-foreground">
@@ -390,24 +399,35 @@ export function OrdersDashboard({
                     }
                     className="text-xs border-green-200 text-green-700 hover:bg-green-50"
                   >
-                    {isLoading ? "..." : "Pronto p/ Retirada"}
+                    {isLoading
+                      ? "..."
+                      : isRoomDelivery
+                        ? "Pronto p/ Entrega"
+                        : "Pronto p/ Retirada"}
                     <ArrowRight className="ml-1 size-3" />
                   </Button>
                 )}
 
-                {/* READY_FOR_PICKUP → COMPLETED (admin direct complete) */}
-                {isAdmin && order.status === "READY_FOR_PICKUP" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isLoading}
-                    onClick={() => handleStatusUpdate(order.id, "COMPLETED")}
-                    className="text-xs border-gray-300 text-gray-700 hover:bg-gray-50"
-                  >
-                    {isLoading ? "..." : "Finalizar Entrega"}
-                    <CheckCircle className="ml-1 size-3" />
-                  </Button>
-                )}
+                {/* READY_FOR_PICKUP → COMPLETED. Entrega no quarto dispensa o
+                    código (qualquer funcionário finaliza); retirada na
+                    portaria exige o código — admin pode forçar direto. */}
+                {(isAdmin || isRoomDelivery) &&
+                  order.status === "READY_FOR_PICKUP" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() => handleStatusUpdate(order.id, "COMPLETED")}
+                      className="text-xs border-gray-300 text-gray-700 hover:bg-gray-50"
+                    >
+                      {isLoading
+                        ? "..."
+                        : isRoomDelivery
+                          ? `Entregue no Quarto ${order.room_number ?? ""}`.trim()
+                          : "Finalizar Entrega"}
+                      <CheckCircle className="ml-1 size-3" />
+                    </Button>
+                  )}
 
                 {/* ADMIN: cancel order */}
                 {isAdmin && !["COMPLETED", "CANCELLED", "EXPIRED"].includes(order.status) && (

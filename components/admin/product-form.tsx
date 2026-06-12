@@ -51,6 +51,7 @@ type ProductFormValue = {
   curatorship?: string;
   inStock: boolean;
   isFeatured: boolean;
+  isAdult?: boolean;
   imageUrl?: string;
   imageUrls?: string[];
   specs: SpecItem[];
@@ -149,6 +150,7 @@ export function ProductForm({
   const [isFeatured, setIsFeatured] = useState(
     initialValue?.isFeatured ?? false,
   );
+  const [isAdult, setIsAdult] = useState(initialValue?.isAdult ?? true);
   const [inStock, setInStock] = useState(initialValue?.inStock ?? true);
   const [specs, setSpecs] = useState<SpecItem[]>(
     initialValue?.specs?.length ? initialValue.specs : [emptySpec()],
@@ -418,6 +420,7 @@ export function ProductForm({
         description,
         curatorship,
         isFeatured,
+        isAdult,
         inStock,
         imageUrl: resolvedImageUrls[0],
         imageUrls: resolvedImageUrls,
@@ -445,6 +448,7 @@ export function ProductForm({
         revokeGallery(productImages);
         setProductImages([]);
         setIsFeatured(false);
+        setIsAdult(true);
         setInStock(true);
         setSpecs([emptySpec()]);
         variants.forEach((variant) => revokeGallery(variant.images));
@@ -790,6 +794,15 @@ export function ProductForm({
             onChange={(event) => setInStock(event.target.checked)}
           />
           Em estoque para produto sem variantes
+        </label>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isAdult}
+            onChange={(event) => setIsAdult(event.target.checked)}
+          />
+          Produto adulto (+18) — desmarque para itens livres (SFW)
         </label>
       </div>
 

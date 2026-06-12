@@ -58,6 +58,7 @@ export type Database = {
           in_stock: boolean | null;
           stock_quantity: number;
           is_featured: boolean | null;
+          is_adult: boolean | null;
           variants: Json | null;
           created_at: string;
           updated_at: string;
@@ -78,6 +79,7 @@ export type Database = {
           in_stock?: boolean | null;
           stock_quantity?: number;
           is_featured?: boolean | null;
+          is_adult?: boolean | null;
           variants?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -98,6 +100,7 @@ export type Database = {
           in_stock?: boolean | null;
           stock_quantity?: number;
           is_featured?: boolean | null;
+          is_adult?: boolean | null;
           variants?: Json | null;
           created_at?: string;
           updated_at?: string;

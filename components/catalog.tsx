@@ -8,6 +8,7 @@ import { ProductModal } from "@/components/product-modal";
 import { HeroSection } from "@/components/hero-section";
 import { BenefitsStrip } from "@/components/benefits-strip";
 import { Product } from "@/lib/store/cart-store";
+import { useAgeModeStore } from "@/lib/store/age-mode-store";
 
 interface CatalogProps {
   products: Product[];
@@ -38,6 +39,47 @@ export function Catalog({
   const [modalOpen, setModalOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
 
+  // Catálogo SFW: enquanto o visitante não confirma 18+ (modo "unset" ou
+  // "sfw"), só produtos livres ficam visíveis — inclusive atrás do blur.
+  const ageMode = useAgeModeStore((state) => state.mode);
+  const isAdultMode = ageMode === "adult";
+  const setAgeMode = useAgeModeStore((state) => state.setMode);
+
+  const visibleProducts = useMemo(
+    () =>
+      isAdultMode
+        ? products
+        : products.filter((product) => !(product.is_adult ?? true)),
+    [products, isAdultMode],
+  );
+
+  const visibleFeatured = useMemo(
+    () =>
+      isAdultMode
+        ? featuredProducts
+        : featuredProducts.filter((product) => !(product.is_adult ?? true)),
+    [featuredProducts, isAdultMode],
+  );
+
+  // Categorias sem nenhum produto visível somem dos pills no modo SFW.
+  const visibleCategories = useMemo(
+    () =>
+      isAdultMode
+        ? categories
+        : categories.filter((category) =>
+            visibleProducts.some(
+              (product) => product.category.trim() === category,
+            ),
+          ),
+    [categories, visibleProducts, isAdultMode],
+  );
+
+  useEffect(() => {
+    if (selectedCategory && !visibleCategories.includes(selectedCategory)) {
+      setSelectedCategory(null);
+    }
+  }, [selectedCategory, visibleCategories]);
+
   useEffect(() => {
     const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024);
     checkDesktop();
@@ -46,21 +88,23 @@ export function Catalog({
   }, []);
 
   const filteredProducts = useMemo(() => {
-    if (!selectedCategory) return products;
-    return products.filter((product) => product.category === selectedCategory);
-  }, [products, selectedCategory]);
+    if (!selectedCategory) return visibleProducts;
+    return visibleProducts.filter(
+      (product) => product.category === selectedCategory,
+    );
+  }, [visibleProducts, selectedCategory]);
 
   const relatedProducts = useMemo(() => {
     if (!selectedProduct) return [];
 
-    return products
+    return visibleProducts
       .filter(
         (product) =>
           product.id !== selectedProduct.id &&
           product.category === selectedProduct.category,
       )
       .slice(0, 4);
-  }, [products, selectedProduct]);
+  }, [visibleProducts, selectedProduct]);
 
   const handleProductSelect = (product: Product) => {
     setSelectedProduct(product);
@@ -80,7 +124,7 @@ export function Catalog({
       {/* Hero Section */}
       <HeroSection
         onProductSelect={handleProductSelect}
-        featuredProducts={featuredProducts}
+        featuredProducts={visibleFeatured}
         heroTitle={heroTitle}
         heroSubtitle={heroSubtitle}
         stats={stats}
@@ -143,8 +187,27 @@ export function Catalog({
               </span>
             </div>
 
+            {ageMode === "sfw" && (
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-pastel-sage/15 px-4 py-2.5">
+                <p
+                  className="text-sm text-foreground"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Você está vendo o <strong>catálogo livre (SFW)</strong>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAgeMode("unset")}
+                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Mudar catálogo
+                </button>
+              </div>
+            )}
+
             <FilterPills
-              categories={categories}
+              categories={visibleCategories}
               selected={selectedCategory}
               onSelect={setSelectedCategory}
             />

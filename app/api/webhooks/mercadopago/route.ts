@@ -37,6 +37,14 @@ function validateWebhookSignature(
 ) {
   const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
   if (!secret) {
+    // Em produção a assinatura é obrigatória: sem segredo configurado,
+    // rejeita tudo em vez de aceitar requisições não verificadas.
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "MERCADO_PAGO_WEBHOOK_SECRET ausente — webhook rejeitado. Configure a assinatura secreta do painel do Mercado Pago.",
+      );
+      return false;
+    }
     return true;
   }
 
@@ -169,20 +177,29 @@ export async function POST(request: Request) {
     }
   }
 
-  const { error: updateError } = await supabase
+  // Transição condicionada ao status lido: se o polling de fallback (ou outra
+  // entrega do webhook) já transicionou, zero linhas são afetadas e os efeitos
+  // colaterais (baixa de estoque, email) não rodam duas vezes.
+  const { data: updatedRows, error: updateError } = await supabase
     .from("orders")
     .update({
       status: mappedStatus,
       pickup_code: pickupCode,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", order.id);
+    .eq("id", order.id)
+    .eq("status", order.status)
+    .select("id");
 
   if (updateError) {
     return NextResponse.json(
       { ok: false, error: updateError.message },
       { status: 500 },
     );
+  }
+
+  if ((updatedRows?.length ?? 0) === 0) {
+    return NextResponse.json({ ok: true, idempotent: true });
   }
 
   if (mappedStatus === "PAID") {
