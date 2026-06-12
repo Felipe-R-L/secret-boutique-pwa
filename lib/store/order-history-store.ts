@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 type SavedOrder = {
   orderId: string;
@@ -13,6 +13,7 @@ type SavedOrder = {
 type OrderHistoryState = {
   orders: SavedOrder[];
   addOrder: (order: SavedOrder) => void;
+  mergeOrder: (orderId: string, patch: Partial<SavedOrder>) => void;
   updateOrderStatus: (orderId: string, status: string) => void;
   getOrders: () => SavedOrder[];
 };
@@ -21,20 +22,29 @@ export const useOrderHistoryStore = create<OrderHistoryState>()(
   persist(
     (set, get) => ({
       orders: [],
-      addOrder: (order) =>
-        set((state) => ({
-          orders: [order, ...state.orders.filter((o) => o.orderId !== order.orderId)],
+      addOrder: order =>
+        set(state => ({
+          orders: [
+            order,
+            ...state.orders.filter(o => o.orderId !== order.orderId),
+          ],
+        })),
+      mergeOrder: (orderId, patch) =>
+        set(state => ({
+          orders: state.orders.map(order =>
+            order.orderId === orderId ? { ...order, ...patch } : order,
+          ),
         })),
       updateOrderStatus: (orderId, status) =>
-        set((state) => ({
-          orders: state.orders.map((o) =>
+        set(state => ({
+          orders: state.orders.map(o =>
             o.orderId === orderId ? { ...o, status } : o,
           ),
         })),
       getOrders: () => get().orders,
     }),
     {
-      name: "secret-boutique-orders",
+      name: 'secret-boutique-orders',
     },
   ),
 );

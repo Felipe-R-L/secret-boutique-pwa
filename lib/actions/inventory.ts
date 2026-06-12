@@ -1,9 +1,12 @@
-"use server";
+'use server';
 
-import { revalidatePath } from "next/cache";
-import { requireAdminContext } from "@/lib/auth/admin";
-import { stockEntrySchema, stockAdjustmentSchema } from "@/lib/schemas/inventory";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { revalidatePath } from 'next/cache';
+import { requireAdminContext } from '@/lib/auth/admin';
+import {
+  stockEntrySchema,
+  stockAdjustmentSchema,
+} from '@/lib/schemas/inventory';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -15,8 +18,8 @@ export async function createStockEntry(input: unknown): Promise<ActionResult> {
     return {
       ok: false,
       error:
-        parsed.error.flatten().formErrors.join(", ") ||
-        "Dados inválidos para entrada de estoque",
+        parsed.error.flatten().formErrors.join(', ') ||
+        'Dados inválidos para entrada de estoque',
     };
   }
 
@@ -26,9 +29,9 @@ export async function createStockEntry(input: unknown): Promise<ActionResult> {
 
   const supabase = createServiceRoleClient();
 
-  const { error } = await supabase.from("inventory_movements").insert({
+  const { error } = await supabase.from('inventory_movements').insert({
     product_id: parsed.data.productId,
-    type: "ENTRY" as const,
+    type: 'ENTRY' as const,
     quantity: parsed.data.quantity,
     invoice_total: parsed.data.invoiceTotal,
     unit_cost: unitCost,
@@ -39,10 +42,10 @@ export async function createStockEntry(input: unknown): Promise<ActionResult> {
     return { ok: false, error: error.message };
   }
 
-  revalidatePath("/");
-  revalidatePath("/admin/inventory");
-  revalidatePath("/admin/products");
-  revalidatePath("/admin/dashboard");
+  revalidatePath('/');
+  revalidatePath('/admin/inventory');
+  revalidatePath('/admin/products');
+  revalidatePath('/admin/dashboard');
   return { ok: true };
 }
 
@@ -56,14 +59,14 @@ export async function createStockAdjustment(
     return {
       ok: false,
       error:
-        parsed.error.flatten().formErrors.join(", ") ||
-        "Dados inválidos para ajuste de estoque",
+        parsed.error.flatten().formErrors.join(', ') ||
+        'Dados inválidos para ajuste de estoque',
     };
   }
 
   const supabase = createServiceRoleClient();
 
-  const { error } = await supabase.from("inventory_movements").insert({
+  const { error } = await supabase.from('inventory_movements').insert({
     product_id: parsed.data.productId,
     type: parsed.data.type,
     quantity: parsed.data.quantity,
@@ -74,10 +77,10 @@ export async function createStockAdjustment(
     return { ok: false, error: error.message };
   }
 
-  revalidatePath("/");
-  revalidatePath("/admin/inventory");
-  revalidatePath("/admin/products");
-  revalidatePath("/admin/dashboard");
+  revalidatePath('/');
+  revalidatePath('/admin/inventory');
+  revalidatePath('/admin/products');
+  revalidatePath('/admin/dashboard');
   return { ok: true };
 }
 
@@ -85,7 +88,7 @@ export type InventoryMovement = {
   id: string;
   product_id: string;
   product_name: string;
-  type: "ENTRY" | "EXIT" | "SALE" | "ADJUSTMENT";
+  type: 'ENTRY' | 'EXIT' | 'SALE' | 'ADJUSTMENT';
   quantity: number;
   invoice_total: number | null;
   unit_cost: number | null;
@@ -96,19 +99,23 @@ export type InventoryMovement = {
 export async function getInventoryMovements(
   productId?: string,
   limit = 50,
-): Promise<{ ok: true; data: InventoryMovement[] } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; data: InventoryMovement[] } | { ok: false; error: string }
+> {
   await requireAdminContext();
 
   const supabase = createServiceRoleClient();
 
   let query = supabase
-    .from("inventory_movements")
-    .select("id,product_id,type,quantity,invoice_total,unit_cost,notes,created_at,products(name)")
-    .order("created_at", { ascending: false })
+    .from('inventory_movements')
+    .select(
+      'id,product_id,type,quantity,invoice_total,unit_cost,notes,created_at,products(name)',
+    )
+    .order('created_at', { ascending: false })
     .limit(limit);
 
   if (productId) {
-    query = query.eq("product_id", productId);
+    query = query.eq('product_id', productId);
   }
 
   const { data, error } = await query;
@@ -117,21 +124,29 @@ export async function getInventoryMovements(
     return { ok: false, error: error.message };
   }
 
-  const movements: InventoryMovement[] = (data ?? []).map((row: Record<string, unknown>) => {
-    const product = row.products as { name: string } | { name: string }[] | null;
-    const productName = Array.isArray(product) ? product[0]?.name : product?.name;
-    return {
-      id: row.id as string,
-      product_id: row.product_id as string,
-      product_name: productName ?? "Produto desconhecido",
-      type: row.type as InventoryMovement["type"],
-      quantity: Number(row.quantity),
-      invoice_total: row.invoice_total != null ? Number(row.invoice_total) : null,
-      unit_cost: row.unit_cost != null ? Number(row.unit_cost) : null,
-      notes: row.notes as string | null,
-      created_at: row.created_at as string,
-    };
-  });
+  const movements: InventoryMovement[] = (data ?? []).map(
+    (row: Record<string, unknown>) => {
+      const product = row.products as
+        | { name: string }
+        | { name: string }[]
+        | null;
+      const productName = Array.isArray(product)
+        ? product[0]?.name
+        : product?.name;
+      return {
+        id: row.id as string,
+        product_id: row.product_id as string,
+        product_name: productName ?? 'Produto desconhecido',
+        type: row.type as InventoryMovement['type'],
+        quantity: Number(row.quantity),
+        invoice_total:
+          row.invoice_total != null ? Number(row.invoice_total) : null,
+        unit_cost: row.unit_cost != null ? Number(row.unit_cost) : null,
+        notes: row.notes as string | null,
+        created_at: row.created_at as string,
+      };
+    },
+  );
 
   return { ok: true, data: movements };
 }
@@ -151,9 +166,12 @@ export type ProductCostSummary = {
 export type DashboardMetrics = {
   avgTicket: number;
   totalRevenue: number;
+  totalProfit: number;
   totalOrders: number;
   totalCostInvested: number;
   avgProfitMarginPct: number;
+  projectedInventoryRevenue: number;
+  projectedInventoryProfit: number;
   productRankBySales: Array<{
     product_id: string;
     product_name: string;
@@ -180,9 +198,9 @@ export async function getDashboardMetrics(): Promise<
 
   // 1. Completed orders for avg ticket & total revenue
   const { data: completedOrders, error: ordersError } = await supabase
-    .from("orders")
-    .select("id,total_amount")
-    .in("status", ["COMPLETED", "PAID", "PREPARING", "READY_FOR_PICKUP"]);
+    .from('orders')
+    .select('id,total_amount')
+    .in('status', ['COMPLETED', 'PAID', 'PREPARING', 'READY_FOR_PICKUP']);
 
   if (ordersError) {
     return { ok: false, error: ordersError.message };
@@ -193,12 +211,13 @@ export async function getDashboardMetrics(): Promise<
     (sum, o) => sum + Number(o.total_amount),
     0,
   );
-  const avgTicket = totalOrders > 0 ? Number((totalRevenue / totalOrders).toFixed(2)) : 0;
+  const avgTicket =
+    totalOrders > 0 ? Number((totalRevenue / totalOrders).toFixed(2)) : 0;
 
   // 2. Sales ranking from order_items
   const { data: salesData, error: salesError } = await supabase
-    .from("order_items")
-    .select("product_id,quantity,unit_price,products(name)");
+    .from('order_items')
+    .select('product_id,quantity,unit_price,products(name)');
 
   if (salesError) {
     return { ok: false, error: salesError.message };
@@ -212,7 +231,7 @@ export async function getDashboardMetrics(): Promise<
   for (const item of salesData ?? []) {
     const prod = item.products as unknown;
     const productData = Array.isArray(prod) ? prod[0] : prod;
-    const name = (productData as { name?: string } | null)?.name ?? "?";
+    const name = (productData as { name?: string } | null)?.name ?? '?';
     const existing = salesByProduct.get(item.product_id) ?? {
       name,
       totalSold: 0,
@@ -235,9 +254,11 @@ export async function getDashboardMetrics(): Promise<
 
   // 3. Cost data from inventory_movements (ENTRY type)
   const { data: costData, error: costError } = await supabase
-    .from("inventory_movements")
-    .select("product_id,quantity,invoice_total,products(name,price,stock_quantity)")
-    .eq("type", "ENTRY");
+    .from('inventory_movements')
+    .select(
+      'product_id,quantity,invoice_total,products(name,price,stock_quantity)',
+    )
+    .eq('type', 'ENTRY');
 
   if (costError) {
     return { ok: false, error: costError.message };
@@ -258,9 +279,12 @@ export async function getDashboardMetrics(): Promise<
   for (const row of costData ?? []) {
     const prod = row.products as unknown;
     const productData = Array.isArray(prod) ? prod[0] : prod;
-    const pName = (productData as { name?: string } | null)?.name ?? "?";
-    const pPrice = Number((productData as { price?: number } | null)?.price ?? 0);
-    const pStockQty = (productData as { stock_quantity?: number } | null)?.stock_quantity ?? 0;
+    const pName = (productData as { name?: string } | null)?.name ?? '?';
+    const pPrice = Number(
+      (productData as { price?: number } | null)?.price ?? 0,
+    );
+    const pStockQty =
+      (productData as { stock_quantity?: number } | null)?.stock_quantity ?? 0;
     const existing = costByProduct.get(row.product_id) ?? {
       name: pName,
       price: pPrice,
@@ -277,29 +301,58 @@ export async function getDashboardMetrics(): Promise<
 
   const costSummaries: ProductCostSummary[] = Array.from(
     costByProduct.entries(),
-  ).map(([id, d]) => {
-    const avgCost = d.totalUnits > 0 ? d.totalInvested / d.totalUnits : 0;
-    const marginPct =
-      d.price > 0 ? Number((((d.price - avgCost) / d.price) * 100).toFixed(1)) : 0;
-    return {
-      product_id: id,
-      product_name: d.name,
-      product_price: d.price,
-      stock_quantity: d.stock_quantity,
-      total_entries: d.totalEntries,
-      total_units_entered: d.totalUnits,
-      total_invested: Number(d.totalInvested.toFixed(2)),
-      weighted_avg_cost: Number(avgCost.toFixed(2)),
-      profit_margin_pct: marginPct,
-    };
-  });
+  )
+    .map(([id, d]) => {
+      const avgCost = d.totalUnits > 0 ? d.totalInvested / d.totalUnits : 0;
+      const marginPct =
+        d.price > 0
+          ? Number((((d.price - avgCost) / d.price) * 100).toFixed(1))
+          : 0;
+      return {
+        product_id: id,
+        product_name: d.name,
+        product_price: d.price,
+        stock_quantity: d.stock_quantity,
+        total_entries: d.totalEntries,
+        total_units_entered: d.totalUnits,
+        total_invested: Number(d.totalInvested.toFixed(2)),
+        weighted_avg_cost: Number(avgCost.toFixed(2)),
+        profit_margin_pct: marginPct,
+      };
+    })
+    .sort((a, b) => {
+      if (b.profit_margin_pct !== a.profit_margin_pct) {
+        return b.profit_margin_pct - a.profit_margin_pct;
+      }
+
+      const profitA =
+        (a.product_price - a.weighted_avg_cost) * a.stock_quantity;
+      const profitB =
+        (b.product_price - b.weighted_avg_cost) * b.stock_quantity;
+      if (profitB !== profitA) {
+        return profitB - profitA;
+      }
+
+      return a.product_name.localeCompare(b.product_name, 'pt-BR');
+    });
 
   const totalCostInvested = costSummaries.reduce(
     (sum, c) => sum + c.total_invested,
     0,
   );
 
-  const marginsWithData = costSummaries.filter((c) => c.profit_margin_pct > 0);
+  const projectedInventoryRevenue = costSummaries.reduce(
+    (sum, item) => sum + item.product_price * item.stock_quantity,
+    0,
+  );
+
+  const projectedInventoryProfit = costSummaries.reduce(
+    (sum, item) =>
+      sum + (item.product_price - item.weighted_avg_cost) * item.stock_quantity,
+    0,
+  );
+
+  const marginsWithData = costSummaries.filter(c => c.profit_margin_pct > 0);
   const avgProfitMarginPct =
     marginsWithData.length > 0
       ? Number(
@@ -311,14 +364,13 @@ export async function getDashboardMetrics(): Promise<
       : 0;
 
   // 4. Profit ranking: combine sales data with cost data
-  const productRankByProfit = Array.from(costByProduct.entries())
-    .map(([id, d]) => {
+  const productProfitRows = Array.from(costByProduct.entries()).map(
+    ([id, d]) => {
       const avgCost = d.totalUnits > 0 ? d.totalInvested / d.totalUnits : 0;
-      const marginPct =
-        d.price > 0 ? ((d.price - avgCost) / d.price) * 100 : 0;
+      const marginPct = d.price > 0 ? ((d.price - avgCost) / d.price) * 100 : 0;
       const sales = salesByProduct.get(id);
       const totalProfit = sales
-        ? (d.price - avgCost) * sales.totalSold
+        ? sales.totalRevenue - avgCost * sales.totalSold
         : 0;
       return {
         product_id: id,
@@ -328,8 +380,26 @@ export async function getDashboardMetrics(): Promise<
         weighted_avg_cost: Number(avgCost.toFixed(2)),
         sell_price: d.price,
       };
+    },
+  );
+
+  const totalProfit = productProfitRows.reduce(
+    (sum, item) => sum + item.total_profit,
+    0,
+  );
+
+  const productRankByProfit = productProfitRows
+    .sort((a, b) => {
+      if (b.profit_margin_pct !== a.profit_margin_pct) {
+        return b.profit_margin_pct - a.profit_margin_pct;
+      }
+
+      if (b.total_profit !== a.total_profit) {
+        return b.total_profit - a.total_profit;
+      }
+
+      return a.product_name.localeCompare(b.product_name, 'pt-BR');
     })
-    .sort((a, b) => b.total_profit - a.total_profit)
     .slice(0, 10);
 
   return {
@@ -337,9 +407,12 @@ export async function getDashboardMetrics(): Promise<
     data: {
       avgTicket,
       totalRevenue: Number(totalRevenue.toFixed(2)),
+      totalProfit: Number(totalProfit.toFixed(2)),
       totalOrders,
       totalCostInvested: Number(totalCostInvested.toFixed(2)),
       avgProfitMarginPct,
+      projectedInventoryRevenue: Number(projectedInventoryRevenue.toFixed(2)),
+      projectedInventoryProfit: Number(projectedInventoryProfit.toFixed(2)),
       productRankBySales,
       productRankByProfit,
       costSummaries,

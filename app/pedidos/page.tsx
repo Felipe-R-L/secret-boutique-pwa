@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
+import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import {
   ArrowLeft,
   Package,
@@ -9,30 +9,30 @@ import {
   CheckCircle,
   RefreshCw,
   ShoppingBag,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useOrderHistoryStore } from "@/lib/store/order-history-store";
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useOrderHistoryStore } from '@/lib/store/order-history-store';
 
 function OrdersSkeleton() {
   return (
-    <div className="animate-pulse space-y-4">
-      <div className="h-4 w-52 rounded bg-muted" />
-      {[0, 1].map((index) => (
+    <div className='animate-pulse space-y-4'>
+      <div className='h-4 w-52 rounded bg-muted' />
+      {[0, 1].map(index => (
         <div
           key={index}
-          className="space-y-3 rounded-2xl border border-border bg-card p-4"
+          className='space-y-3 rounded-2xl border border-border bg-card p-4'
         >
-          <div className="flex items-start justify-between gap-2">
-            <div className="space-y-2">
-              <div className="h-3 w-20 rounded bg-muted" />
-              <div className="h-4 w-32 rounded bg-muted" />
+          <div className='flex items-start justify-between gap-2'>
+            <div className='space-y-2'>
+              <div className='h-3 w-20 rounded bg-muted' />
+              <div className='h-4 w-32 rounded bg-muted' />
             </div>
-            <div className="h-6 w-28 rounded-full bg-muted" />
+            <div className='h-6 w-28 rounded-full bg-muted' />
           </div>
-          <div className="h-16 rounded-xl bg-muted" />
-          <div className="flex items-center justify-between">
-            <div className="h-4 w-20 rounded bg-muted" />
-            <div className="h-8 w-24 rounded bg-muted" />
+          <div className='h-16 rounded-xl bg-muted' />
+          <div className='flex items-center justify-between'>
+            <div className='h-4 w-20 rounded bg-muted' />
+            <div className='h-8 w-24 rounded bg-muted' />
           </div>
         </div>
       ))}
@@ -42,23 +42,23 @@ function OrdersSkeleton() {
 
 const statusLabels: Record<string, { label: string; color: string }> = {
   PENDING: {
-    label: "Aguardando Pagamento",
-    color: "bg-yellow-100 text-yellow-800",
+    label: 'Aguardando Pagamento',
+    color: 'bg-yellow-100 text-yellow-800',
   },
-  PAID: { label: "Pagamento Confirmado", color: "bg-blue-100 text-blue-800" },
-  PREPARING: { label: "Em Preparo", color: "bg-orange-100 text-orange-800" },
+  PAID: { label: 'Pagamento Confirmado', color: 'bg-blue-100 text-blue-800' },
+  PREPARING: { label: 'Em Preparo', color: 'bg-orange-100 text-orange-800' },
   READY_FOR_PICKUP: {
-    label: "Pronto p/ Retirada",
-    color: "bg-green-100 text-green-800",
+    label: 'Pronto p/ Retirada',
+    color: 'bg-green-100 text-green-800',
   },
-  COMPLETED: { label: "Finalizado", color: "bg-gray-100 text-gray-600" },
-  CANCELLED: { label: "Cancelado", color: "bg-red-100 text-red-800" },
-  EXPIRED: { label: "Expirado", color: "bg-gray-100 text-gray-500" },
+  COMPLETED: { label: 'Finalizado', color: 'bg-gray-100 text-gray-600' },
+  CANCELLED: { label: 'Cancelado', color: 'bg-red-100 text-red-800' },
+  EXPIRED: { label: 'Expirado', color: 'bg-gray-100 text-gray-500' },
 };
 
 export default function MeusPedidosPage() {
-  const orders = useOrderHistoryStore((s) => s.orders);
-  const updateOrderStatus = useOrderHistoryStore((s) => s.updateOrderStatus);
+  const orders = useOrderHistoryStore(s => s.orders);
+  const mergeOrder = useOrderHistoryStore(s => s.mergeOrder);
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
 
@@ -68,34 +68,39 @@ export default function MeusPedidosPage() {
 
   const refreshStatus = useCallback(
     async (orderId: string) => {
-      setRefreshing((prev) => new Set(prev).add(orderId));
+      setRefreshing(prev => new Set(prev).add(orderId));
       try {
         const res = await fetch(`/api/orders/${orderId}/status`);
         if (res.ok) {
           const json = await res.json();
           if (json.ok && json.data?.status) {
-            updateOrderStatus(orderId, json.data.status);
+            mergeOrder(orderId, {
+              status: json.data.status,
+              total: Number(json.data.totalAmount ?? 0),
+              pickupCode: json.data.pickupCode ?? null,
+              date: json.data.createdAt ?? new Date().toISOString(),
+            });
           }
         }
       } catch {
         // ignore
       }
-      setRefreshing((prev) => {
+      setRefreshing(prev => {
         const next = new Set(prev);
         next.delete(orderId);
         return next;
       });
     },
-    [updateOrderStatus],
+    [mergeOrder],
   );
 
   // Refresh all active orders on mount
   useEffect(() => {
     if (!mounted) return;
-    orders.forEach((order) => {
+    orders.forEach(order => {
       if (
         !order.status ||
-        !["COMPLETED", "CANCELLED", "EXPIRED"].includes(order.status)
+        !['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(order.status)
       ) {
         refreshStatus(order.orderId);
       }
@@ -103,81 +108,81 @@ export default function MeusPedidosPage() {
   }, [mounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatPrice = (price: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
     }).format(price);
 
   const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+    new Date(dateStr).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
-        <div className="flex h-14 items-center gap-3 px-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/" aria-label="Voltar">
-              <ArrowLeft className="size-5" />
+    <div className='min-h-screen bg-background'>
+      <header className='sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur'>
+        <div className='flex h-14 items-center gap-3 px-4'>
+          <Button variant='ghost' size='icon' asChild>
+            <Link href='/' aria-label='Voltar'>
+              <ArrowLeft className='size-5' />
             </Link>
           </Button>
-          <h1 className="text-lg font-semibold text-foreground">
+          <h1 className='text-lg font-semibold text-foreground'>
             Meus Pedidos
           </h1>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl p-4 md:px-6 md:py-6">
+      <main className='mx-auto w-full max-w-2xl p-4 md:px-6 md:py-6'>
         {!mounted ? (
           <OrdersSkeleton />
         ) : orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-pastel-lavender/20">
-              <ShoppingBag className="size-9 text-muted-foreground" />
+          <div className='flex flex-col items-center justify-center py-16 text-center'>
+            <div className='mb-4 flex size-20 items-center justify-center rounded-full bg-pastel-lavender/20'>
+              <ShoppingBag className='size-9 text-muted-foreground' />
             </div>
-            <h2 className="text-lg font-medium text-foreground">
+            <h2 className='text-lg font-medium text-foreground'>
               Nenhum pedido ainda
             </h2>
             <p
-              className="mt-1 text-sm text-muted-foreground"
-              style={{ fontFamily: "Inter, sans-serif" }}
+              className='mt-1 text-sm text-muted-foreground'
+              style={{ fontFamily: 'Inter, sans-serif' }}
             >
               Seus pedidos aparecerão aqui automaticamente
             </p>
-            <Button asChild className="mt-6 h-12 rounded-full px-6">
-              <Link href="/">Explorar Catálogo</Link>
+            <Button asChild className='mt-6 h-12 rounded-full px-6'>
+              <Link href='/'>Explorar Catálogo</Link>
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className='space-y-4'>
             <p
-              className="text-sm text-muted-foreground"
-              style={{ fontFamily: "Inter, sans-serif" }}
+              className='text-sm text-muted-foreground'
+              style={{ fontFamily: 'Inter, sans-serif' }}
             >
               Histórico salvo neste dispositivo
             </p>
 
-            {orders.map((order) => {
-              const status = statusLabels[order.status ?? "PENDING"] ??
-                statusLabels.PENDING;
+            {orders.map(order => {
+              const status =
+                statusLabels[order.status ?? 'PENDING'] ?? statusLabels.PENDING;
               const isRefreshing = refreshing.has(order.orderId);
 
               return (
                 <div
                   key={order.orderId}
-                  className="space-y-3 rounded-2xl border border-border bg-card p-4"
+                  className='space-y-3 rounded-2xl border border-border bg-card p-4'
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className='flex items-start justify-between gap-2'>
                     <div>
-                      <p className="font-mono text-xs text-muted-foreground">
+                      <p className='font-mono text-xs text-muted-foreground'>
                         #{order.orderId.slice(0, 8)}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className='text-sm text-muted-foreground'>
                         {formatDate(order.date)}
                       </p>
                     </div>
@@ -189,27 +194,27 @@ export default function MeusPedidosPage() {
                   </div>
 
                   {order.pickupCode && (
-                    <div className="rounded-xl bg-pastel-peach/15 p-3 text-center">
-                      <p className="text-xs text-muted-foreground">
+                    <div className='rounded-xl bg-pastel-peach/15 p-3 text-center'>
+                      <p className='text-xs text-muted-foreground'>
                         Código de retirada
                       </p>
-                      <p className="font-mono text-xl font-bold tracking-widest text-foreground">
+                      <p className='font-mono text-xl font-bold tracking-widest text-foreground'>
                         {order.pickupCode}
                       </p>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{formatPrice(order.total)}</p>
+                  <div className='flex items-center justify-between'>
+                    <p className='font-medium'>{formatPrice(order.total)}</p>
                     <Button
-                      variant="ghost"
-                      size="sm"
+                      variant='ghost'
+                      size='sm'
                       disabled={isRefreshing}
                       onClick={() => refreshStatus(order.orderId)}
-                      className="text-xs"
+                      className='text-xs'
                     >
                       <RefreshCw
-                        className={`mr-1 size-3 ${isRefreshing ? "animate-spin" : ""}`}
+                        className={`mr-1 size-3 ${isRefreshing ? 'animate-spin' : ''}`}
                       />
                       Atualizar
                     </Button>

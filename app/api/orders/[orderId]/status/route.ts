@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { NextResponse } from 'next/server';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export async function GET(
   _request: Request,
@@ -9,21 +9,23 @@ export async function GET(
 
   if (!orderId) {
     return NextResponse.json(
-      { ok: false, error: "Missing orderId" },
+      { ok: false, error: 'Missing orderId' },
       { status: 400 },
     );
   }
 
   const supabase = createServiceRoleClient();
   const { data: order, error } = await supabase
-    .from("orders")
-    .select("id,status,pickup_code,created_at,updated_at,completed_at")
-    .eq("id", orderId)
+    .from('orders')
+    .select(
+      'id,status,pickup_code,total_amount,created_at,updated_at,completed_at',
+    )
+    .eq('id', orderId)
     .maybeSingle();
 
   if (error || !order) {
     return NextResponse.json(
-      { ok: false, error: "Order not found" },
+      { ok: false, error: 'Order not found' },
       { status: 404 },
     );
   }
@@ -34,6 +36,7 @@ export async function GET(
       id: order.id,
       status: order.status,
       pickupCode: order.pickup_code,
+      totalAmount: Number(order.total_amount),
       createdAt: order.created_at,
       updatedAt: order.updated_at,
       completedAt: order.completed_at,
