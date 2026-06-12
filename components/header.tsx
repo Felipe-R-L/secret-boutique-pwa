@@ -28,7 +28,7 @@ export function Header() {
     <>
       {/* Announcement bar */}
       <div className="relative overflow-hidden bg-gradient-to-r from-pastel-rose/80 via-pastel-lavender/60 to-pastel-peach/80 px-4 py-2 text-center">
-        <div className="flex items-center justify-center gap-2 text-xs font-medium text-foreground/80 sm:text-sm">
+        <div className="flex items-center justify-center gap-2 text-xs font-medium text-foreground sm:text-sm">
           <Sparkles className="size-3.5 shrink-0" />
           <span>
             Retirada 100% anônima • Sem contato • 14h às 5h
@@ -57,6 +57,8 @@ export function Header() {
               <img
                 src="/logo.png"
                 alt="Secret Boutique"
+                width={324}
+                height={118}
                 className="h-12 w-auto md:h-14 lg:h-16"
               />
             </Link>
@@ -67,7 +69,7 @@ export function Header() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-all duration-300 hover:bg-accent/40 hover:text-foreground"
+                  className="rounded-full px-4 py-2 text-sm font-medium text-foreground/90 transition-all duration-300 hover:bg-accent/40 hover:text-foreground"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   {link.label}
@@ -97,7 +99,7 @@ export function Header() {
 
       {/* Mobile menu sheet */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-80">
+        <SheetContent side="left" className="w-80 max-w-[85vw]">
           <SheetHeader>
             <SheetTitle className="text-left font-sans text-lg">
               Menu
@@ -108,7 +110,7 @@ export function Header() {
               <SheetClose key={link.href} asChild>
                 <Link
                   href={link.href}
-                  className="rounded-xl px-4 py-3 text-base font-medium text-foreground/80 transition-all duration-200 hover:bg-accent/40 hover:text-foreground"
+                  className="rounded-xl px-4 py-3 text-base font-medium text-foreground transition-all duration-200 hover:bg-accent/40 hover:text-foreground"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   {link.label}

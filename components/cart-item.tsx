@@ -10,13 +10,36 @@ import {
 } from "@/lib/store/cart-store";
 import { getPrimaryProductImage } from "@/lib/product-images";
 import { getVariantDisplayLabel } from "@/lib/product-variants";
+import { toast } from "sonner";
 
 interface CartItemProps {
   item: CartItemType;
 }
 
 export function CartItem({ item }: CartItemProps) {
-  const { updateQuantity, removeItem } = useCartStore();
+  const { addItem, updateQuantity, removeItem } = useCartStore();
+
+  const handleRemove = () => {
+    const removed = item;
+    removeItem(item.product.id, item.variant?.id);
+
+    toast("Item removido do carrinho", {
+      description: removed.product.name,
+      position: "bottom-center",
+      duration: 5000,
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          addItem(removed.product, removed.variant);
+          updateQuantity(
+            removed.product.id,
+            removed.variant?.id,
+            removed.quantity,
+          );
+        },
+      },
+    });
+  };
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -90,7 +113,7 @@ export function CartItem({ item }: CartItemProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={() => removeItem(item.product.id, item.variant?.id)}
+            onClick={handleRemove}
             className="text-muted-foreground hover:text-destructive"
             aria-label="Remover item"
           >

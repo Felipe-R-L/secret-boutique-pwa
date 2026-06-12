@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 export interface ProductSpecs {
   [key: string]: string;
@@ -69,8 +70,10 @@ interface CartStore {
   getItemCount: () => number;
 }
 
-export const useCartStore = create<CartStore>((set, get) => ({
-  items: [],
+export const useCartStore = create<CartStore>()(
+  persist(
+    (set, get) => ({
+      items: [],
 
   addItem: (product: Product, variant?: ProductVariant) => {
     set((state) => {
@@ -137,4 +140,15 @@ export const useCartStore = create<CartStore>((set, get) => ({
   getItemCount: () => {
     return get().items.reduce((count, item) => count + item.quantity, 0);
   },
-}));
+    }),
+    {
+      name: "secret-boutique-cart",
+      // sessionStorage: o carrinho sobrevive a reloads, mas morre ao fechar o
+      // navegador — meio-termo alinhado à proposta de privacidade da loja.
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({ items: state.items }),
+      // Rehidratação manual pós-mount (CartHydration) para não divergir do SSR.
+      skipHydration: true,
+    },
+  ),
+);

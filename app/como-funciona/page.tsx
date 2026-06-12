@@ -92,8 +92,8 @@ export default function ComoFuncionaPage() {
               className="mx-auto mt-4 max-w-xl text-base text-muted-foreground md:text-lg"
               style={{ fontFamily: "Inter, sans-serif" }}
             >
-              Compre com total privacidade. Não coletamos nenhum dado pessoal —
-              seu código é a única coisa que você precisa.
+              Compre com total privacidade. Não armazenamos seus dados pessoais
+              — seu código é a única coisa que você precisa.
             </p>
           </div>
         </section>
@@ -204,13 +204,14 @@ export default function ComoFuncionaPage() {
             <div className="rounded-2xl bg-pastel-rose/20 p-6 text-center">
               <EyeOff className="mx-auto mb-3 size-8 text-foreground/60" />
               <h4 className="mb-1 font-sans text-base font-semibold text-foreground">
-                Sem dados pessoais
+                Dados não armazenados
               </h4>
               <p
                 className="text-sm text-muted-foreground"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
-                Não coletamos nome, email ou qualquer informação pessoal.
+                Nome, email e CPF vão apenas para o gateway de pagamento — nada
+                fica guardado conosco.
               </p>
             </div>
             <div className="rounded-2xl bg-pastel-lavender/20 p-6 text-center">

@@ -18,6 +18,7 @@ export default async function Home() {
       <main>
         <Catalog
           products={data.products}
+          categories={data.categories}
           featuredProducts={data.featuredProducts}
           heroTitle={data.storeSettings.heroTitle}
           heroSubtitle={data.storeSettings.heroSubtitle}

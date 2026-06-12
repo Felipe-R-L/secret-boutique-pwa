@@ -42,6 +42,7 @@ import {
 import { ProductCuratorship } from "@/components/product-curatorship";
 import { AnonymousReviews } from "@/components/anonymous-reviews";
 import { ProductVariantPicker } from "@/components/product-variant-picker";
+import { showAddedToCartToast } from "@/components/cart-toast";
 
 interface ProductModalProps {
   product: Product | null;
@@ -189,6 +190,7 @@ export function ProductModal({
     for (let i = 0; i < quantity; i++) {
       addItem(product, selectedVariant);
     }
+    showAddedToCartToast(product.name);
     setQuantity(1);
     onOpenChange(false);
   };

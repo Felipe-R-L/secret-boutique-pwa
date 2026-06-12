@@ -13,6 +13,33 @@ import {
 import { Button } from "@/components/ui/button";
 import { useOrderHistoryStore } from "@/lib/store/order-history-store";
 
+function OrdersSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4">
+      <div className="h-4 w-52 rounded bg-muted" />
+      {[0, 1].map((index) => (
+        <div
+          key={index}
+          className="space-y-3 rounded-2xl border border-border bg-card p-4"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-2">
+              <div className="h-3 w-20 rounded bg-muted" />
+              <div className="h-4 w-32 rounded bg-muted" />
+            </div>
+            <div className="h-6 w-28 rounded-full bg-muted" />
+          </div>
+          <div className="h-16 rounded-xl bg-muted" />
+          <div className="flex items-center justify-between">
+            <div className="h-4 w-20 rounded bg-muted" />
+            <div className="h-8 w-24 rounded bg-muted" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const statusLabels: Record<string, { label: string; color: string }> = {
   PENDING: {
     label: "Aguardando Pagamento",
@@ -90,8 +117,6 @@ export default function MeusPedidosPage() {
       minute: "2-digit",
     });
 
-  if (!mounted) return null;
-
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
@@ -108,7 +133,9 @@ export default function MeusPedidosPage() {
       </header>
 
       <main className="mx-auto w-full max-w-2xl p-4 md:px-6 md:py-6">
-        {orders.length === 0 ? (
+        {!mounted ? (
+          <OrdersSkeleton />
+        ) : orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-pastel-lavender/20">
               <ShoppingBag className="size-9 text-muted-foreground" />

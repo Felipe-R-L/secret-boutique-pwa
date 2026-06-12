@@ -279,14 +279,6 @@ export const products: Product[] = [
   },
 ];
 
-export const categories = [
-  { id: "destaques", label: "Destaques", icon: "sparkles" },
-  { id: "massagem", label: "Massagem", icon: "droplets" },
-  { id: "brinquedos", label: "Brinquedos", icon: "heart" },
-] as const;
-
-export type Category = (typeof categories)[number]["id"];
-
 export function getRelatedProducts(productId: string, limit = 4): Product[] {
   const product = products.find((p) => p.id === productId);
   if (!product) return [];

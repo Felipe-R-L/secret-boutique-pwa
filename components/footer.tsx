@@ -83,6 +83,8 @@ export function Footer() {
               <img
                 src="/logo.png"
                 alt="Secret Boutique"
+                width={324}
+                height={118}
                 className="h-10 w-auto opacity-70"
               />
               <p

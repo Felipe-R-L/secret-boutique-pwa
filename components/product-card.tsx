@@ -2,8 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { ShoppingBag, Star, Check } from "lucide-react";
+import { ShoppingBag, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCartStore, Product } from "@/lib/store/cart-store";
 import {
@@ -12,7 +11,7 @@ import {
   getProductImages,
 } from "@/lib/product-images";
 import { hasProductVariants } from "@/lib/product-variants";
-import { toast } from "sonner";
+import { showAddedToCartToast } from "@/components/cart-toast";
 
 interface ProductCardProps {
   product: Product;
@@ -26,6 +25,12 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
   const hasSecondImage = Boolean(secondImage);
   const productHasVariants = hasProductVariants(product);
 
+  // Urgência honesta: só para produtos sem variantes (o estoque por variante
+  // é escolhido no detalhe) e com poucas unidades reais restantes.
+  const stockQty = product.stock_quantity ?? 0;
+  const lowStockQty =
+    !productHasVariants && stockQty > 0 && stockQty <= 5 ? stockQty : null;
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
 
@@ -35,58 +40,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
     }
 
     addItem(product);
-
-    toast.custom(
-      (t) => (
-        <div className="w-full rounded-2xl border border-border bg-card p-4 shadow-xl">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-pastel-sage">
-              <Check className="size-4 text-secondary-foreground" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p
-                className="text-sm font-semibold text-foreground"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                Adicionado ao carrinho
-              </p>
-              <p
-                className="truncate text-xs text-muted-foreground"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                {product.name}
-              </p>
-            </div>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 flex-1 rounded-full text-xs"
-              onClick={() => {
-                toast.dismiss(t);
-              }}
-            >
-              Continuar Comprando
-            </Button>
-            <Button
-              size="sm"
-              className="h-9 flex-1 rounded-full text-xs"
-              asChild
-            >
-              <Link href="/cart" onClick={() => toast.dismiss(t)}>
-                Ver Carrinho
-              </Link>
-            </Button>
-          </div>
-        </div>
-      ),
-      {
-        duration: 4000,
-        position: "bottom-center",
-        style: { width: "100%", maxWidth: "400px" },
-      },
-    );
+    showAddedToCartToast(product.name);
   };
 
   const formatPrice = (price: number) => {
@@ -98,8 +52,18 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
   return (
     <article
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(product)}
-      className="group cursor-pointer overflow-hidden rounded-3xl bg-card ring-1 ring-border/50 transition-all duration-300 hover:ring-primary/20 hover:shadow-xl hover:shadow-primary/5"
+      onKeyDown={(e) => {
+        // Keydown borbulha do botão interno "Adicionar"; só reage no próprio card.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(product);
+        }
+      }}
+      className="group cursor-pointer overflow-hidden rounded-3xl bg-card ring-1 ring-border/50 transition-all duration-300 hover:ring-primary/20 hover:shadow-xl hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <div className="relative aspect-square w-full overflow-hidden bg-muted">
         {/* Primary image */}
@@ -122,12 +86,19 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
           />
         )}
 
-        {/* In stock badge */}
-        {product.inStock && (
-          <div className="absolute left-3 top-3 rounded-full bg-pastel-sage/90 px-2.5 py-1 text-[10px] font-medium text-secondary-foreground backdrop-blur-sm">
-            Em estoque
-          </div>
-        )}
+        {/* In stock / low stock badge */}
+        {product.inStock &&
+          (lowStockQty ? (
+            <div className="absolute left-3 top-3 rounded-full bg-pastel-peach/95 px-2.5 py-1 text-[10px] font-semibold text-foreground backdrop-blur-sm">
+              {lowStockQty === 1
+                ? "Última unidade"
+                : `Últimas ${lowStockQty} unidades`}
+            </div>
+          ) : (
+            <div className="absolute left-3 top-3 rounded-full bg-pastel-sage/90 px-2.5 py-1 text-[10px] font-medium text-secondary-foreground backdrop-blur-sm">
+              Em estoque
+            </div>
+          ))}
 
         {productHasVariants && (
           <div className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
@@ -140,7 +111,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
           <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white backdrop-blur-sm">
             <Star className="size-3 fill-amber-400 text-amber-400" />
             <span className="font-medium">{product.rating.toFixed(1)}</span>
-            <span className="text-white/75">({product.reviews})</span>
+            <span className="text-white/90">({product.reviews})</span>
           </div>
         )}
       </div>

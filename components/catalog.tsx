@@ -6,11 +6,12 @@ import { FilterPills } from "@/components/filter-pills";
 import { ProductDrawer } from "@/components/product-drawer";
 import { ProductModal } from "@/components/product-modal";
 import { HeroSection } from "@/components/hero-section";
-import { Category } from "@/lib/data/products";
+import { BenefitsStrip } from "@/components/benefits-strip";
 import { Product } from "@/lib/store/cart-store";
 
 interface CatalogProps {
   products: Product[];
+  categories: string[];
   featuredProducts: Product[];
   heroTitle: string;
   heroSubtitle: string;
@@ -23,12 +24,13 @@ interface CatalogProps {
 
 export function Catalog({
   products,
+  categories,
   featuredProducts,
   heroTitle,
   heroSubtitle,
   stats,
 }: CatalogProps) {
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(
     null,
   );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -46,7 +48,7 @@ export function Catalog({
   const filteredProducts = useMemo(() => {
     if (!selectedCategory) return products;
     return products.filter((product) => product.category === selectedCategory);
-  }, [selectedCategory]);
+  }, [products, selectedCategory]);
 
   const relatedProducts = useMemo(() => {
     if (!selectedProduct) return [];
@@ -83,6 +85,9 @@ export function Catalog({
         heroSubtitle={heroSubtitle}
         stats={stats}
       />
+
+      {/* Faixa de benefícios — reforça os diferenciais logo após o hero */}
+      <BenefitsStrip />
 
       {/* Decorative wave divider */}
       <div className="relative h-16 overflow-hidden md:h-24">
@@ -139,6 +144,7 @@ export function Catalog({
             </div>
 
             <FilterPills
+              categories={categories}
               selected={selectedCategory}
               onSelect={setSelectedCategory}
             />

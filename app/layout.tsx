@@ -4,6 +4,8 @@ import { Geist, Geist_Mono, Playfair_Display, Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Toaster } from "sonner";
+import { CartHydration } from "@/components/cart-hydration";
+import { CartBar } from "@/components/cart-bar";
 import "./globals.css";
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -117,10 +119,12 @@ export default function RootLayout({
         />
       </head>
       <body className={`font-sans antialiased`}>
-        
+        <CartHydration />
         {children}
+        <CartBar />
         <Toaster
           position="bottom-center"
+          mobileOffset={{ bottom: 88 }}
           toastOptions={{
             style: {
               background: "transparent",

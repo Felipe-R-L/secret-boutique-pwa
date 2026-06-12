@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart-store";
 import { initializeCheckout } from "@/lib/actions/checkout";
+import { track } from "@vercel/analytics";
 
 type DeliveryMethod = "MOTEL_PICKUP" | "ROOM_DELIVERY";
 
@@ -81,6 +82,10 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     }
 
     setIsSubmitting(true);
+    track("begin_checkout", {
+      items: items.length,
+      total: getTotal(),
+    });
 
     const result = await initializeCheckout({
       deliveryMethod: getDeliveryMethod(),

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
 import type {
   Product,
   ProductVariant,
@@ -13,6 +13,19 @@ const DEFAULT_HERO_SUBTITLE =
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 
 type StoreSettingsRow = Database["public"]["Tables"]["store_settings"]["Row"];
+
+function parseCategories(value: Json | null): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0),
+    ),
+  );
+}
 
 function parseProductImageUrls(
   images: Database["public"]["Tables"]["products"]["Row"]["images"],
@@ -127,7 +140,7 @@ export async function getCatalogData() {
       .order("created_at", { ascending: false }),
     supabase
       .from("store_settings")
-      .select("id,hero_title,hero_subtitle")
+      .select("id,hero_title,hero_subtitle,categories")
       .eq("id", 1)
       .maybeSingle(),
   ]);
@@ -188,12 +201,40 @@ export async function getCatalogData() {
       : null;
 
   const settings = settingsResult.data as StoreSettingsRow | null;
+
+  // Categorias reais: ordem definida no admin (store_settings.categories),
+  // mais qualquer categoria usada em produtos que ainda não esteja na lista.
+  const settingsCategories = parseCategories(settings?.categories ?? null);
+  const unregisteredCategories = Array.from(
+    new Set(
+      productsWithMetrics
+        .map((product) => product.category.trim())
+        .filter((category) => category.length > 0),
+    ),
+  )
+    .filter((category) => !settingsCategories.includes(category))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const categories = [...settingsCategories, ...unregisteredCategories];
+
+  // Destaques mantêm a ordem original da query (mais recentes primeiro).
   const featuredProducts = productsWithMetrics
     .filter((product) => product.is_featured)
     .slice(0, 8);
 
+  const categoryRank = new Map(
+    categories.map((category, index) => [category, index]),
+  );
+  const sortedProducts = [...productsWithMetrics].sort((a, b) => {
+    const rankA = categoryRank.get(a.category.trim()) ?? categories.length;
+    const rankB = categoryRank.get(b.category.trim()) ?? categories.length;
+    if (rankA !== rankB) return rankA - rankB;
+    return a.name.localeCompare(b.name, "pt-BR");
+  });
+
   return {
-    products: productsWithMetrics,
+    products: sortedProducts,
+    categories,
     featuredProducts,
     stats: {
       completedOrdersCount: completedOrdersResult.count ?? 0,
