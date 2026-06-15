@@ -81,7 +81,7 @@ export default function PrivacidadePage() {
       <Header />
 
       <main>
-        <section className='relative overflow-hidden bg-gradient-to-b from-pastel-lavender/15 to-background'>
+        <section className='relative overflow-hidden bg-linear-to-b from-pastel-lavender/15 to-background'>
           <div className='relative mx-auto max-w-3xl px-4 py-14 text-center md:px-6 md:py-20'>
             <div className='mb-6 inline-flex items-center gap-2 rounded-full bg-pastel-lavender/30 px-4 py-2 text-sm font-medium text-accent-foreground'>
               <Lock className='size-4' />
