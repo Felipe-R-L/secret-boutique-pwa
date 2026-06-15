@@ -10,6 +10,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -163,7 +164,9 @@ export function OrdersDashboard({
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: orders.find((x) => x.id === orderId)?.status ?? o.status } : o)),
       );
-      alert(`Erro: ${result.error}`);
+      toast.error("Não foi possível atualizar o pedido", {
+        description: result.error,
+      });
     }
 
     setLoading(orderId, false);

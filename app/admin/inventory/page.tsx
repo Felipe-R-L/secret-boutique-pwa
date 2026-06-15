@@ -1,10 +1,10 @@
-import { requireAdminContext } from "@/lib/auth/admin";
+import { requireAdminPage } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getInventoryMovements } from "@/lib/actions/inventory";
 import { InventoryPanel } from "@/components/admin/inventory-panel";
 
 export default async function AdminInventoryPage() {
-  await requireAdminContext();
+  await requireAdminPage({ adminOnly: true });
 
   const supabase = createServiceRoleClient();
 

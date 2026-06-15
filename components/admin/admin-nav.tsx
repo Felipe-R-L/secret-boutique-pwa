@@ -3,21 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { AdminRole } from "@/lib/auth/admin";
 
-const links = [
-  { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/orders", label: "Pedidos" },
-  { href: "/admin/products", label: "Produtos" },
-  { href: "/admin/inventory", label: "Estoque" },
-  { href: "/admin/settings", label: "Configurações da Loja" },
+const links: Array<{ href: string; label: string; adminOnly: boolean }> = [
+  { href: "/admin/orders", label: "Pedidos", adminOnly: false },
+  { href: "/admin/dashboard", label: "Dashboard", adminOnly: true },
+  { href: "/admin/products", label: "Produtos", adminOnly: true },
+  { href: "/admin/inventory", label: "Estoque", adminOnly: true },
+  { href: "/admin/settings", label: "Configurações da Loja", adminOnly: true },
 ];
 
-export function AdminNav() {
+export function AdminNav({ role }: { role: AdminRole }) {
   const pathname = usePathname();
+  const visibleLinks =
+    role === "ADMIN" ? links : links.filter((link) => !link.adminOnly);
 
   return (
     <nav className="flex flex-wrap items-center gap-2">
-      {links.map((link) => {
+      {visibleLinks.map((link) => {
         const isActive = pathname === link.href;
 
         return (

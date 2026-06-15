@@ -2,7 +2,7 @@ import {
   ProductsAdminPanel,
   type AdminProductCard,
 } from "@/components/admin/products-admin-panel";
-import { requireAdminContext } from "@/lib/auth/admin";
+import { requireAdminPage } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -99,7 +99,7 @@ function parseImageUrls(value: Json | null): string[] {
 }
 
 export default async function AdminProductsPage() {
-  await requireAdminContext();
+  await requireAdminPage({ adminOnly: true });
 
   const supabase = await createClient();
 

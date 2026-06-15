@@ -1,10 +1,9 @@
-import { getAdminContext, requireAdminContext } from "@/lib/auth/admin";
+import { requireAdminPage } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import { OrdersDashboard } from "@/components/admin/orders-dashboard";
 
 export default async function AdminOrdersPage() {
-  const context = await getAdminContext();
-  await requireAdminContext();
+  const context = await requireAdminPage();
 
   const supabase = await createClient();
   const { data: orders, error: ordersError } = await supabase
@@ -36,7 +35,7 @@ export default async function AdminOrdersPage() {
       </div>
       <OrdersDashboard
         initialOrders={(orders ?? []) as never}
-        isAdmin={context?.role === "ADMIN"}
+        isAdmin={context.role === "ADMIN"}
       />
     </section>
   );

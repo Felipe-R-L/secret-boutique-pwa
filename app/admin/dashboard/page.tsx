@@ -1,9 +1,9 @@
-import { requireAdminContext } from "@/lib/auth/admin";
+import { requireAdminPage } from "@/lib/auth/admin";
 import { getDashboardMetrics } from "@/lib/actions/inventory";
 import { DashboardPanel } from "@/components/admin/dashboard-panel";
 
 export default async function AdminDashboardPage() {
-  await requireAdminContext();
+  await requireAdminPage({ adminOnly: true });
 
   const result = await getDashboardMetrics();
 

@@ -5,11 +5,11 @@ import {
   updateStoreSettings,
   upsertAdminUser,
 } from "@/lib/actions/admin";
-import { requireAdminContext } from "@/lib/auth/admin";
+import { requireAdminPage } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminSettingsPage() {
-  const context = await requireAdminContext();
+  const context = await requireAdminPage({ adminOnly: true });
 
   const supabase = await createClient();
   const { data: storeSettings } = await supabase

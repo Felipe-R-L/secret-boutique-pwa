@@ -29,7 +29,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
   // é escolhido no detalhe) e com poucas unidades reais restantes.
   const stockQty = product.stock_quantity ?? 0;
   const lowStockQty =
-    !productHasVariants && stockQty > 0 && stockQty <= 5 ? stockQty : null;
+    !productHasVariants && stockQty > 0 && stockQty <= 3 ? stockQty : null;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();

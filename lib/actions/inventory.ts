@@ -102,7 +102,7 @@ export async function getInventoryMovements(
 ): Promise<
   { ok: true; data: InventoryMovement[] } | { ok: false; error: string }
 > {
-  await requireAdminContext();
+  await requireAdminContext({ adminOnly: true });
 
   const supabase = createServiceRoleClient();
 
@@ -192,7 +192,7 @@ export type DashboardMetrics = {
 export async function getDashboardMetrics(): Promise<
   { ok: true; data: DashboardMetrics } | { ok: false; error: string }
 > {
-  await requireAdminContext();
+  await requireAdminContext({ adminOnly: true });
 
   const supabase = createServiceRoleClient();
 

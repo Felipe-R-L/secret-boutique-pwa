@@ -15,7 +15,7 @@ const DEFAULT_HERO_SUBTITLE =
   "Produtos premium selecionados para transformar seus momentos especiais em experiencias inesqueciveis.";
 
 export async function listAdminUsers() {
-  await requireAdminContext();
+  await requireAdminContext({ adminOnly: true });
 
   const supabase = await createClient();
   const { data, error } = await supabase

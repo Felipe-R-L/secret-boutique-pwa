@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -67,15 +68,39 @@ export async function getAdminContext(): Promise<AdminContext | null> {
   };
 }
 
-export async function requireAdminContext(options?: { write?: boolean }) {
+export async function requireAdminContext(options?: {
+  write?: boolean;
+  adminOnly?: boolean;
+}) {
   const context = await getAdminContext();
 
   if (!context) {
     throw new Error("Unauthorized");
   }
 
-  if (options?.write && context.role !== "ADMIN") {
+  // `write` (mutations) e `adminOnly` (leituras sensíveis) exigem ADMIN.
+  if ((options?.write || options?.adminOnly) && context.role !== "ADMIN") {
     throw new Error("Forbidden");
+  }
+
+  return context;
+}
+
+/**
+ * Page-level guard for the admin area. Unlike `requireAdminContext` (which
+ * throws — appropriate for server actions), this redirects gracefully:
+ * unauthenticated visitors go to login, and STAFF hitting an ADMIN-only page
+ * are sent to the orders dashboard (the only area STAFF can use).
+ */
+export async function requireAdminPage(options?: { adminOnly?: boolean }) {
+  const context = await getAdminContext();
+
+  if (!context) {
+    redirect("/auth/login");
+  }
+
+  if (options?.adminOnly && context.role !== "ADMIN") {
+    redirect("/admin/orders");
   }
 
   return context;

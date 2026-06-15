@@ -27,7 +27,7 @@ export default async function AdminLayout({
           </div>
 
           <div className="flex items-center gap-3">
-            <AdminNav />
+            <AdminNav role={context.role} />
             <Button asChild variant="outline" size="sm">
               <Link href="/">Voltar para loja</Link>
             </Button>
