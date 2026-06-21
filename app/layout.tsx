@@ -8,6 +8,7 @@ import { CartHydration } from '@/components/cart-hydration';
 import { CartBar } from '@/components/cart-bar';
 import { AgeGate } from '@/components/age-gate';
 import { RoomParamCapture } from '@/components/room-param-capture';
+import { WhatsappFab } from '@/components/whatsapp-fab';
 import './globals.css';
 
 const _geist = Geist({ subsets: ['latin'] });
@@ -127,6 +128,7 @@ export default function RootLayout({
         <RoomParamCapture />
         {children}
         <CartBar />
+        <WhatsappFab />
         <AgeGate />
         <Toaster
           position='bottom-center'
