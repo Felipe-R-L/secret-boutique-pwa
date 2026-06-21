@@ -20,6 +20,7 @@ const _inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://secret-boutique.com.br'),
+  manifest: '/manifest.webmanifest',
   title: 'The Secret Boutique | Bem-estar Sexual e Autocuidado',
   description:
     'Sua boutique íntima de autocuidado e bem-estar sexual em Pitangueiras. Produtos selecionados de qualidade com retirada discreta e anônima no JR Dallas Motel.',

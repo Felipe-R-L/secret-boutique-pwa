@@ -20,6 +20,8 @@ import {
   deleteOrderByAdmin,
 } from "@/lib/actions/orders";
 import type { OrderStatus } from "@/lib/supabase/database.types";
+import { OrderItemsButton } from "@/components/admin/order-items-modal";
+import { playNotificationSound } from "@/lib/sound";
 
 type Order = {
   id: string;
@@ -92,6 +94,13 @@ export function OrdersDashboard({
   const [newOrderAlert, setNewOrderAlert] = useState(false);
   const [filter, setFilter] = useState<OrderStatus | "ALL">("ALL");
 
+  // Alerta visual + som quando um novo pedido pago chega e o ADMIN/STAFF está
+  // com a página aberta. O push mobile é tratado separadamente no servidor.
+  const notifyNewOrder = useCallback(() => {
+    setNewOrderAlert(true);
+    playNotificationSound();
+  }, []);
+
   // Real-time subscription
   useEffect(() => {
     const supabase = createClient();
@@ -109,21 +118,24 @@ export function OrdersDashboard({
             const newOrder = payload.new as Order;
             setOrders((prev) => [newOrder, ...prev]);
             if (newOrder.status === "PAID") {
-              setNewOrderAlert(true);
-              // Play a subtle notification sound (optional)
-              try {
-                const audio = new Audio("/notification.mp3");
-                audio.volume = 0.3;
-                audio.play().catch(() => {});
-              } catch {
-                // ignore
-              }
+              notifyNewOrder();
             }
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as Order;
-            setOrders((prev) =>
-              prev.map((o) => (o.id === updated.id ? updated : o)),
-            );
+            // O fluxo real do cliente cria o pedido como PENDING e o webhook do
+            // Mercado Pago o transiciona para PAID via UPDATE — por isso o som
+            // precisa disparar aqui, não só no INSERT.
+            setOrders((prev) => {
+              const previous = prev.find((o) => o.id === updated.id);
+              if (
+                previous &&
+                previous.status !== "PAID" &&
+                updated.status === "PAID"
+              ) {
+                notifyNewOrder();
+              }
+              return prev.map((o) => (o.id === updated.id ? updated : o));
+            });
           } else if (payload.eventType === "DELETE") {
             const deleted = payload.old as { id: string };
             setOrders((prev) => prev.filter((o) => o.id !== deleted.id));
@@ -376,7 +388,13 @@ export function OrdersDashboard({
               </div>
 
               {/* Action buttons based on status */}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <OrderItemsButton
+                  orderId={order.id}
+                  customerName={order.customer_name}
+                  totalAmount={Number(order.total_amount)}
+                />
+
                 {/* PAID → PREPARING */}
                 {order.status === "PAID" && (
                   <Button

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { getOrderById } from '@/lib/mercadopago/client';
 import { decrementOrderStockByVariants } from '@/lib/server/product-variants';
 import { sendVoucherEmail } from '@/lib/services/email';
+import { sendPushToAdmins } from '@/lib/push/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 function generatePickupCode(): string {
@@ -191,7 +192,9 @@ export async function POST(request: Request) {
   const supabase = createServiceRoleClient();
   const { data: order, error: orderLookupError } = await supabase
     .from('orders')
-    .select('id,status,pickup_code')
+    .select(
+      'id,status,pickup_code,customer_name,total_amount,delivery_method,room_number',
+    )
     .eq('mercadopago_order_id', mpOrderId)
     .maybeSingle();
 
@@ -262,6 +265,25 @@ export async function POST(request: Request) {
       await sendVoucherEmail(order.id);
     } catch (emailError) {
       console.error('Failed sending voucher email', emailError);
+    }
+
+    try {
+      const total = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(Number(order.total_amount));
+      const destino =
+        order.delivery_method === 'ROOM_DELIVERY'
+          ? `Quarto ${order.room_number ?? ''}`.trim()
+          : 'Portaria';
+      await sendPushToAdmins({
+        title: 'Novo pedido pago 🛍️',
+        body: `${order.customer_name} • ${total} • ${destino}`,
+        url: '/admin/orders',
+        tag: `order-${order.id}`,
+      });
+    } catch (pushError) {
+      console.error('Failed sending push notification', pushError);
     }
   }
 

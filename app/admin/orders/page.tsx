@@ -1,6 +1,7 @@
 import { requireAdminPage } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import { OrdersDashboard } from "@/components/admin/orders-dashboard";
+import { PushNotifications } from "@/components/admin/push-notifications";
 
 export default async function AdminOrdersPage() {
   const context = await requireAdminPage();
@@ -27,11 +28,14 @@ export default async function AdminOrdersPage() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold">Pedidos</h2>
-        <p className="text-sm text-muted-foreground">
-          Painel em tempo real • Atualizações automáticas
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">Pedidos</h2>
+          <p className="text-sm text-muted-foreground">
+            Painel em tempo real • Atualizações automáticas
+          </p>
+        </div>
+        <PushNotifications />
       </div>
       <OrdersDashboard
         initialOrders={(orders ?? []) as never}

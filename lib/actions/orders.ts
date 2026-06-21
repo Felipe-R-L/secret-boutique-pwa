@@ -253,3 +253,72 @@ export async function deleteOrderByAdmin(input: unknown) {
   revalidatePath("/admin/orders");
   return { ok: true as const };
 }
+
+export type OrderItemView = {
+  id: number;
+  productId: string;
+  name: string;
+  imageUrl: string | null;
+  variantLabel: string | null;
+  quantity: number;
+  unitPrice: number;
+};
+
+/**
+ * Itens de um pedido para exibição no painel. STAFF e ADMIN podem ler; usamos o
+ * service role porque a tabela `products` tem RLS de escrita restrita e queremos
+ * garantir o nome/imagem do produto mesmo para STAFF.
+ */
+export async function getOrderItems(input: unknown): Promise<
+  | { ok: true; items: OrderItemView[] }
+  | { ok: false; error: string }
+> {
+  await requireAdminContext();
+
+  const parsed = z.object({ orderId: z.string().uuid() }).safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: "Pedido inválido" };
+  }
+
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("order_items")
+    .select(
+      "id,product_id,variant_label,quantity,unit_price,products(name,image,image_url,images)",
+    )
+    .eq("order_id", parsed.data.orderId)
+    .order("id", { ascending: true });
+
+  if (error) {
+    return { ok: false as const, error: error.message };
+  }
+
+  const items: OrderItemView[] = (data ?? []).map((row) => {
+    const product = (row as { products: unknown }).products as
+      | {
+          name: string | null;
+          image: string | null;
+          image_url: string | null;
+          images: unknown;
+        }
+      | null;
+
+    const imagesArray = Array.isArray(product?.images)
+      ? (product?.images as unknown[])
+      : null;
+    const firstImage =
+      typeof imagesArray?.[0] === "string" ? (imagesArray[0] as string) : null;
+
+    return {
+      id: Number(row.id),
+      productId: row.product_id,
+      name: product?.name ?? "Produto removido",
+      imageUrl: product?.image_url ?? product?.image ?? firstImage ?? null,
+      variantLabel: row.variant_label,
+      quantity: row.quantity,
+      unitPrice: Number(row.unit_price),
+    };
+  });
+
+  return { ok: true as const, items };
+}
