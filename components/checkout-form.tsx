@@ -4,9 +4,18 @@ import React from "react";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { QrCode, CheckCircle, Shield, AlertCircle, DoorOpen } from "lucide-react";
+import {
+  QrCode,
+  CheckCircle,
+  Shield,
+  AlertCircle,
+  DoorOpen,
+  Store,
+  BedDouble,
+  Home,
+  Loader2,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -21,13 +30,44 @@ import {
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart-store";
 import { initializeCheckout } from "@/lib/actions/checkout";
+import { HOME_DELIVERY_FEE } from "@/lib/schemas";
+import { fetchAddressByCep, formatCep } from "@/lib/viacep";
 import { track } from "@vercel/analytics";
 
-type DeliveryMethod = "MOTEL_PICKUP" | "ROOM_DELIVERY";
+type DeliveryMethod = "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
 
 interface CheckoutFormProps {
   onSuccess: (orderId: string) => void;
 }
+
+const DELIVERY_OPTIONS: Array<{
+  method: DeliveryMethod;
+  title: string;
+  description: string;
+  icon: typeof Store;
+}> = [
+  {
+    method: "MOTEL_PICKUP",
+    title: "Retirar na recepção",
+    description: "Retire o pedido na portaria.",
+    icon: Store,
+  },
+  {
+    method: "ROOM_DELIVERY",
+    title: "Entrega no quarto",
+    description: "Levamos até o seu quarto.",
+    icon: BedDouble,
+  },
+  {
+    method: "HOME_DELIVERY",
+    title: "Entrega a domicílio",
+    description: `Entrega no seu endereço (+ ${new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(HOME_DELIVERY_FEE)} de frete).`,
+    icon: Home,
+  },
+];
 
 function formatCpf(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -41,25 +81,36 @@ function formatCpf(value: string): string {
 export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
   const router = useRouter();
   const [step, setStep] = useState(1);
+  const [deliveryMethod, setDeliveryMethod] =
+    useState<DeliveryMethod>("MOTEL_PICKUP");
   const [roomNumber, setRoomNumber] = useState("");
-  // Default: retirada na recepção. O QR code do quarto (?quarto=N) muda
-  // para entrega no quarto com o número já preenchido.
-  const [pickupAtLobby, setPickupAtLobby] = useState(true);
   const [roomFromQr, setRoomFromQr] = useState(false);
   const [confirmRoomOpen, setConfirmRoomOpen] = useState(false);
+
+  // Endereço (entrega a domicílio)
+  const [cep, setCep] = useState("");
+  const [street, setStreet] = useState("");
+  const [addressNumber, setAddressNumber] = useState("");
+  const [complement, setComplement] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [city, setCity] = useState("");
+  const [uf, setUf] = useState("");
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState("");
 
   useEffect(() => {
     try {
       const savedRoom = sessionStorage.getItem("sb-room")?.trim();
       if (savedRoom) {
         setRoomNumber(savedRoom);
-        setPickupAtLobby(false);
+        setDeliveryMethod("ROOM_DELIVERY");
         setRoomFromQr(true);
       }
     } catch {
       // armazenamento bloqueado — mantém o default (recepção)
     }
   }, []);
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [cpf, setCpf] = useState("");
@@ -77,11 +128,24 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     }).format(price);
   };
 
-  const getDeliveryMethod = (): DeliveryMethod => {
-    return pickupAtLobby ? "MOTEL_PICKUP" : "ROOM_DELIVERY";
-  };
+  const isHome = deliveryMethod === "HOME_DELIVERY";
+  const isRoom = deliveryMethod === "ROOM_DELIVERY";
+  const deliveryFee = isHome ? HOME_DELIVERY_FEE : 0;
+  const cepDigitsOnly = cep.replace(/\D/g, "");
 
-  const canGoToStepTwo = pickupAtLobby || roomNumber.trim().length > 0;
+  const addressComplete =
+    cepDigitsOnly.length === 8 &&
+    street.trim().length > 0 &&
+    addressNumber.trim().length > 0 &&
+    neighborhood.trim().length > 0 &&
+    city.trim().length > 0 &&
+    uf.trim().length > 0;
+
+  const canGoToStepTwo = isRoom
+    ? roomNumber.trim().length > 0
+    : isHome
+      ? addressComplete
+      : true;
 
   const cpfDigits = cpf.replace(/\D/g, "");
   const emailsMatch =
@@ -93,6 +157,33 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     cpfDigits.length === 11 &&
     customerEmail.includes("@") &&
     emailsMatch;
+
+  const handleCepLookup = async (rawCep: string) => {
+    setCepError("");
+    const digits = rawCep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+
+    setCepLoading(true);
+    try {
+      const address = await fetchAddressByCep(digits);
+      setStreet(address.street);
+      setNeighborhood(address.neighborhood);
+      setCity(address.city);
+      setUf(address.state);
+    } catch (error) {
+      setCepError(
+        error instanceof Error ? error.message : "Erro ao consultar o CEP",
+      );
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  const deliveryLabel = (() => {
+    if (isRoom) return `Entrega no Quarto (${roomNumber.trim()})`;
+    if (isHome) return "Entrega a domicílio";
+    return "Retirar na recepção";
+  })();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -111,12 +202,19 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     setIsSubmitting(true);
     track("begin_checkout", {
       items: items.length,
-      total: getTotal(),
+      total: getTotal() + deliveryFee,
     });
 
     const result = await initializeCheckout({
-      deliveryMethod: getDeliveryMethod(),
-      roomNumber: pickupAtLobby ? undefined : roomNumber.trim(),
+      deliveryMethod,
+      roomNumber: isRoom ? roomNumber.trim() : undefined,
+      deliveryCep: isHome ? cepDigitsOnly : undefined,
+      deliveryStreet: isHome ? street.trim() : undefined,
+      deliveryNumber: isHome ? addressNumber.trim() : undefined,
+      deliveryComplement: isHome ? complement.trim() || undefined : undefined,
+      deliveryNeighborhood: isHome ? neighborhood.trim() : undefined,
+      deliveryCity: isHome ? city.trim() : undefined,
+      deliveryState: isHome ? uf.trim().toUpperCase() : undefined,
       customerName: `${firstName.trim()} ${lastName.trim()}`,
       customerEmail: customerEmail.trim(),
       payerFirstName: firstName.trim(),
@@ -153,6 +251,14 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     router.push(`/checkout/${result.orderId}`);
   };
 
+  const handleContinueFromStepOne = () => {
+    if (isRoom) {
+      setConfirmRoomOpen(true);
+    } else {
+      setStep(2);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -175,20 +281,61 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
       {step === 1 && (
         <div className="space-y-4">
-          <h3 className="font-medium text-foreground">1. Método de Retirada</h3>
+          <h3 className="font-medium text-foreground">1. Método de Entrega</h3>
 
-          <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
-            <label htmlFor="pickup-toggle" className="text-sm text-foreground">
-              Retirar na recepção (portaria)
-            </label>
-            <Switch
-              id="pickup-toggle"
-              checked={pickupAtLobby}
-              onCheckedChange={setPickupAtLobby}
-            />
+          <div className="space-y-3">
+            {DELIVERY_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              const selected = deliveryMethod === option.method;
+              return (
+                <button
+                  key={option.method}
+                  type="button"
+                  onClick={() => {
+                    setDeliveryMethod(option.method);
+                    if (option.method !== "ROOM_DELIVERY") {
+                      setRoomFromQr(false);
+                    }
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl border p-4 text-left transition",
+                    selected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border bg-card hover:border-primary/40",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "flex size-10 items-center justify-center rounded-full",
+                      selected
+                        ? "bg-primary/15 text-primary"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    <Icon className="size-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {option.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {option.description}
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "size-4 rounded-full border-2",
+                      selected
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground/40",
+                    )}
+                  />
+                </button>
+              );
+            })}
           </div>
 
-          {!pickupAtLobby && (
+          {isRoom && (
             <div className="space-y-3 rounded-xl border border-border bg-card p-4 text-center">
               <label
                 htmlFor="room-number"
@@ -222,26 +369,160 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
             </div>
           )}
 
+          {isHome && (
+            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+              <div className="space-y-2">
+                <label htmlFor="cep" className="text-sm text-muted-foreground">
+                  CEP
+                </label>
+                <div className="relative">
+                  <Input
+                    id="cep"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="00000-000"
+                    value={cep}
+                    maxLength={9}
+                    onChange={(e) => {
+                      const masked = formatCep(e.target.value);
+                      setCep(masked);
+                      if (masked.replace(/\D/g, "").length === 8) {
+                        void handleCepLookup(masked);
+                      }
+                    }}
+                    onBlur={(e) => void handleCepLookup(e.target.value)}
+                    className="h-12 rounded-xl"
+                  />
+                  {cepLoading && (
+                    <Loader2 className="absolute right-3 top-3.5 size-5 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                {cepError && (
+                  <p className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="size-3" />
+                    {cepError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="street"
+                  className="text-sm text-muted-foreground"
+                >
+                  Rua / Logradouro
+                </label>
+                <Input
+                  id="street"
+                  type="text"
+                  placeholder="Rua, avenida..."
+                  value={street}
+                  onChange={(e) => setStreet(e.target.value)}
+                  className="h-12 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="address-number"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Número
+                  </label>
+                  <Input
+                    id="address-number"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="123"
+                    value={addressNumber}
+                    onChange={(e) => setAddressNumber(e.target.value)}
+                    className="h-12 rounded-xl"
+                  />
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <label
+                    htmlFor="complement"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Complemento (opcional)
+                  </label>
+                  <Input
+                    id="complement"
+                    type="text"
+                    placeholder="Apto, bloco..."
+                    value={complement}
+                    onChange={(e) => setComplement(e.target.value)}
+                    className="h-12 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="neighborhood"
+                  className="text-sm text-muted-foreground"
+                >
+                  Bairro
+                </label>
+                <Input
+                  id="neighborhood"
+                  type="text"
+                  placeholder="Bairro"
+                  value={neighborhood}
+                  onChange={(e) => setNeighborhood(e.target.value)}
+                  className="h-12 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-2">
+                  <label
+                    htmlFor="city"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Cidade
+                  </label>
+                  <Input
+                    id="city"
+                    type="text"
+                    placeholder="Cidade"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="h-12 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="uf" className="text-sm text-muted-foreground">
+                    UF
+                  </label>
+                  <Input
+                    id="uf"
+                    type="text"
+                    placeholder="UF"
+                    maxLength={2}
+                    value={uf}
+                    onChange={(e) =>
+                      setUf(e.target.value.toUpperCase().slice(0, 2))
+                    }
+                    className="h-12 rounded-xl uppercase"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <Button
             type="button"
             className="w-full rounded-xl"
-            onClick={() => {
-              if (pickupAtLobby) {
-                setStep(2);
-              } else {
-                setConfirmRoomOpen(true);
-              }
-            }}
+            onClick={handleContinueFromStepOne}
             disabled={!canGoToStepTwo}
           >
             Continuar
           </Button>
 
           {/* Confirmação do quarto — evita pedido entregue na porta errada */}
-          <AlertDialog
-            open={confirmRoomOpen}
-            onOpenChange={setConfirmRoomOpen}
-          >
+          <AlertDialog open={confirmRoomOpen} onOpenChange={setConfirmRoomOpen}>
             <AlertDialogContent className="max-w-xs rounded-3xl text-center">
               <AlertDialogHeader className="items-center">
                 <div className="flex size-12 items-center justify-center rounded-full bg-pastel-lavender/30">
@@ -434,13 +715,16 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
           <div className="rounded-xl border border-border bg-card p-4 text-sm">
             <p className="text-muted-foreground">Resumo</p>
+            <p className="mt-1 font-medium">Entrega: {deliveryLabel}</p>
+            {isHome && (
+              <p className="text-xs text-muted-foreground">
+                {street.trim()}, {addressNumber.trim()}
+                {complement.trim() ? ` - ${complement.trim()}` : ""} —{" "}
+                {neighborhood.trim()}, {city.trim()}/{uf.trim().toUpperCase()} —
+                CEP {cep.trim()}
+              </p>
+            )}
             <p className="mt-1 font-medium">
-              Entrega:{" "}
-              {pickupAtLobby
-                ? "Motel Pickup"
-                : `Entrega no Quarto (${roomNumber.trim()})`}
-            </p>
-            <p className="font-medium">
               Cliente: {firstName.trim()} {lastName.trim()}
             </p>
             <p className="font-medium">Email: {customerEmail.trim()}</p>
@@ -453,9 +737,19 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
           )}
 
           <div className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>Subtotal</span>
+              <span>{formatPrice(getTotal())}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>Frete</span>
+              <span>
+                {deliveryFee > 0 ? formatPrice(deliveryFee) : "Grátis"}
+              </span>
+            </div>
             <div className="flex items-center justify-between text-lg font-semibold">
               <span>Total</span>
-              <span>{formatPrice(getTotal())}</span>
+              <span>{formatPrice(getTotal() + deliveryFee)}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

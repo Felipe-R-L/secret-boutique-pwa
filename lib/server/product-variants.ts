@@ -91,6 +91,77 @@ export function parsePersistedProductVariants(
     .filter((variant): variant is PersistedProductVariant => variant !== null);
 }
 
+/**
+ * Applies a signed stock delta to a single product variant inside the
+ * products.variants JSONB, then recomputes the variant's in_stock flag and
+ * the product's aggregate stock_quantity/in_stock. Used by manual inventory
+ * adjustments (saída/entrada/ajuste) that target a specific variant.
+ *
+ * `delta` is signed: negative for EXIT/SALE, positive for ENTRY/ADJUSTMENT.
+ * Variant stock is clamped at 0 (never negative).
+ */
+export async function applyVariantStockDelta(
+  supabase: ServiceRoleClient,
+  productId: string,
+  variantId: string,
+  delta: number,
+) {
+  const { data: product, error: productError } = await supabase
+    .from("products")
+    .select("id,variants")
+    .eq("id", productId)
+    .single();
+
+  if (productError) {
+    throw new Error(productError.message);
+  }
+
+  const persistedVariants = parsePersistedProductVariants(product?.variants);
+
+  if (persistedVariants.length === 0) {
+    throw new Error("Produto não possui variantes cadastradas.");
+  }
+
+  if (!persistedVariants.some((variant) => variant.id === variantId)) {
+    throw new Error("Variante não encontrada para este produto.");
+  }
+
+  const nextVariants = persistedVariants.map((variant) => {
+    if (variant.id !== variantId) return variant;
+
+    const nextStock = Math.max(variant.stock_quantity + delta, 0);
+
+    return {
+      ...variant,
+      stock_quantity: nextStock,
+      // Keep the manual availability intent, but never mark in_stock when
+      // there are zero units left.
+      in_stock: variant.in_stock && nextStock > 0,
+    };
+  });
+
+  const aggregateStock = nextVariants.reduce(
+    (total, variant) => total + variant.stock_quantity,
+    0,
+  );
+
+  const { error } = await supabase
+    .from("products")
+    .update({
+      variants: nextVariants,
+      stock_quantity: aggregateStock,
+      in_stock: nextVariants.some(
+        (variant) => variant.in_stock && variant.stock_quantity > 0,
+      ),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function decrementOrderStockByVariants(
   supabase: ServiceRoleClient,
   orderId: string,

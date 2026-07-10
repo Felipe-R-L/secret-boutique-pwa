@@ -14,11 +14,18 @@ import { Badge } from "@/components/ui/badge";
 import { createStockEntry, createStockAdjustment } from "@/lib/actions/inventory";
 import type { InventoryMovement } from "@/lib/actions/inventory";
 
+type VariantOption = {
+  id: string;
+  label: string;
+  stock_quantity: number;
+};
+
 type ProductOption = {
   id: string;
   name: string;
   price: number;
   stock_quantity: number;
+  variants: VariantOption[];
 };
 
 interface InventoryPanelProps {
@@ -63,9 +70,17 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
 
   // Adjustment form state
   const [adjProductId, setAdjProductId] = useState("");
+  const [adjVariantId, setAdjVariantId] = useState("");
   const [adjQuantity, setAdjQuantity] = useState("");
   const [adjType, setAdjType] = useState<"ENTRY" | "EXIT" | "ADJUSTMENT">("ADJUSTMENT");
   const [adjNotes, setAdjNotes] = useState("");
+
+  const adjProduct = useMemo(
+    () => products.find((p) => p.id === adjProductId) ?? null,
+    [products, adjProductId],
+  );
+  const adjVariants = adjProduct?.variants ?? [];
+  const adjHasVariants = adjVariants.length > 0;
 
   const unitCost = useMemo(() => {
     const qty = Number(quantity);
@@ -108,11 +123,21 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
     setMessage("");
     setIsError(false);
 
+    if (adjHasVariants && !adjVariantId) {
+      setMessage("Selecione a variante para o ajuste.");
+      setIsError(true);
+      return;
+    }
+
+    const selectedVariant = adjVariants.find((v) => v.id === adjVariantId);
+
     startTransition(async () => {
       const result = await createStockAdjustment({
         productId: adjProductId,
         quantity: Number(adjQuantity),
         type: adjType,
+        variantId: adjHasVariants ? adjVariantId : undefined,
+        variantLabel: selectedVariant?.label || undefined,
         notes: adjNotes.trim() || undefined,
       });
 
@@ -126,6 +151,7 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
       setIsError(false);
       setAdjQuantity("");
       setAdjNotes("");
+      setAdjVariantId("");
     });
   };
 
@@ -243,7 +269,10 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
           <form onSubmit={handleAdjustment} className="space-y-3">
             <select
               value={adjProductId}
-              onChange={(e) => setAdjProductId(e.target.value)}
+              onChange={(e) => {
+                setAdjProductId(e.target.value);
+                setAdjVariantId("");
+              }}
               className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
               required
             >
@@ -254,6 +283,28 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
                 </option>
               ))}
             </select>
+
+            {adjHasVariants && (
+              <div className="space-y-1">
+                <select
+                  value={adjVariantId}
+                  onChange={(e) => setAdjVariantId(e.target.value)}
+                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                  required
+                >
+                  <option value="">Selecione a variante</option>
+                  {adjVariants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label} ({v.stock_quantity} un.)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Este produto tem variantes — o ajuste será aplicado à variante
+                  selecionada.
+                </p>
+              </div>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <select
@@ -364,6 +415,11 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
                       </td>
                       <td className="px-4 py-3 font-medium">
                         {mov.product_name}
+                        {mov.variant_label && (
+                          <span className="ml-1 font-normal text-muted-foreground">
+                            · {mov.variant_label}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span

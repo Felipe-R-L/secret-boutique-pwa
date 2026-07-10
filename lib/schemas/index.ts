@@ -10,7 +10,15 @@ export const orderStatusSchema = z.enum([
   "CANCELLED",
   "EXPIRED",
 ]);
-export const deliveryMethodSchema = z.enum(["MOTEL_PICKUP", "ROOM_DELIVERY"]);
+export const deliveryMethodSchema = z.enum([
+  "MOTEL_PICKUP",
+  "ROOM_DELIVERY",
+  "HOME_DELIVERY",
+]);
+
+// Taxa fixa de entrega a domicílio (R$). Fonte da verdade compartilhada
+// entre o cálculo server-side (checkout) e a exibição no formulário.
+export const HOME_DELIVERY_FEE = 5;
 
 export const upsertAdminUserSchema = z
   .object({
@@ -113,6 +121,14 @@ export const initializeCheckoutSchema = z
   .object({
     deliveryMethod: deliveryMethodSchema,
     roomNumber: z.string().trim().max(20).optional(),
+    // Endereço externo — obrigatório apenas para HOME_DELIVERY.
+    deliveryCep: z.string().trim().max(9).optional(),
+    deliveryStreet: z.string().trim().max(200).optional(),
+    deliveryNumber: z.string().trim().max(20).optional(),
+    deliveryComplement: z.string().trim().max(120).optional(),
+    deliveryNeighborhood: z.string().trim().max(120).optional(),
+    deliveryCity: z.string().trim().max(120).optional(),
+    deliveryState: z.string().trim().max(2).optional(),
     customerName: z.string().trim().min(2).max(120),
     customerEmail: z.string().trim().email().max(180),
     payerFirstName: z.string().trim().min(1).max(60),
@@ -134,12 +150,45 @@ export const initializeCheckoutSchema = z
       });
     }
 
-    if (value.deliveryMethod === "MOTEL_PICKUP" && hasRoom) {
+    // Número de quarto só é válido para entrega no quarto.
+    if (value.deliveryMethod !== "ROOM_DELIVERY" && hasRoom) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "roomNumber must be empty for MOTEL_PICKUP",
+        message: "roomNumber must be empty unless ROOM_DELIVERY",
         path: ["roomNumber"],
       });
+    }
+
+    if (value.deliveryMethod === "HOME_DELIVERY") {
+      const requiredAddress: Array<
+        [keyof typeof value, string | undefined]
+      > = [
+        ["deliveryCep", value.deliveryCep],
+        ["deliveryStreet", value.deliveryStreet],
+        ["deliveryNumber", value.deliveryNumber],
+        ["deliveryNeighborhood", value.deliveryNeighborhood],
+        ["deliveryCity", value.deliveryCity],
+        ["deliveryState", value.deliveryState],
+      ];
+
+      for (const [field, fieldValue] of requiredAddress) {
+        if (!fieldValue || fieldValue.trim().length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `${String(field)} é obrigatório para entrega a domicílio`,
+            path: [String(field)],
+          });
+        }
+      }
+
+      const cepDigits = (value.deliveryCep ?? "").replace(/\D/g, "");
+      if (cepDigits.length !== 8) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "CEP deve ter 8 dígitos",
+          path: ["deliveryCep"],
+        });
+      }
     }
   });
 

@@ -147,7 +147,7 @@ export async function getCatalogData() {
   ]);
 
   // Fallback de migração: se a coluna is_adult ainda não existir no banco
-  // (scripts/010 não aplicado), refaz a query sem ela — tudo vira +18.
+  // (supabase/010 não aplicado), refaz a query sem ela — tudo vira +18.
   if (productsResult.error?.message?.includes("is_adult")) {
     productsResult = (await supabase
       .from("products")

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminContext } from "@/lib/auth/admin";
+import { logAudit } from "@/lib/audit/log";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import {
@@ -31,7 +32,7 @@ export async function listAdminUsers() {
 }
 
 export async function upsertAdminUser(input: unknown) {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = upsertAdminUserSchema.safeParse(input);
   if (!parsed.success) {
@@ -56,13 +57,25 @@ export async function upsertAdminUser(input: unknown) {
     return { ok: false as const, error: error.message };
   }
 
+  await logAudit(
+    {
+      action: "admin_user.upsert",
+      category: "admin_user",
+      targetType: "admin_user",
+      targetId: parsed.data.id,
+      targetLabel: parsed.data.email,
+      metadata: { role: parsed.data.role },
+    },
+    context,
+  );
+
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   return { ok: true as const };
 }
 
 export async function removeAdminUser(input: unknown) {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   if (
     typeof input !== "object" ||
@@ -74,14 +87,25 @@ export async function removeAdminUser(input: unknown) {
   }
 
   const supabase = createServiceRoleClient();
+  const targetId = (input as { id: string }).id;
   const { error } = await supabase
     .from("admin_users")
     .delete()
-    .eq("id", (input as { id: string }).id);
+    .eq("id", targetId);
 
   if (error) {
     return { ok: false as const, error: error.message };
   }
+
+  await logAudit(
+    {
+      action: "admin_user.remove",
+      category: "admin_user",
+      targetType: "admin_user",
+      targetId,
+    },
+    context,
+  );
 
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
@@ -89,7 +113,7 @@ export async function removeAdminUser(input: unknown) {
 }
 
 export async function updateStoreSettings(input: unknown) {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = updateStoreSettingsSchema.safeParse(input);
   if (!parsed.success) {
@@ -114,6 +138,15 @@ export async function updateStoreSettings(input: unknown) {
     return { ok: false as const, error: error.message };
   }
 
+  await logAudit(
+    {
+      action: "settings.update_hero",
+      category: "settings",
+      metadata: { heroTitle: parsed.data.heroTitle },
+    },
+    context,
+  );
+
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
@@ -122,7 +155,7 @@ export async function updateStoreSettings(input: unknown) {
 }
 
 export async function updateStoreCategories(input: unknown) {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = updateStoreCategoriesSchema.safeParse(input);
   if (!parsed.success) {
@@ -164,6 +197,15 @@ export async function updateStoreCategories(input: unknown) {
   if (error) {
     return { ok: false as const, error: error.message };
   }
+
+  await logAudit(
+    {
+      action: "settings.update_categories",
+      category: "settings",
+      metadata: { count: parsed.data.categories.length },
+    },
+    context,
+  );
 
   revalidatePath("/");
   revalidatePath("/admin");

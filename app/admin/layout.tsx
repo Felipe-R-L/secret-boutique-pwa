@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminNav } from "@/components/admin/admin-nav";
+import { AuditTracker } from "@/components/admin/audit-tracker";
 import { Button } from "@/components/ui/button";
 import { getAdminContext } from "@/lib/auth/admin";
 
@@ -17,6 +18,7 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-background">
+      <AuditTracker />
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 px-4 py-4 backdrop-blur md:px-6">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">

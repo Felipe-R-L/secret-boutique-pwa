@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminContext } from "@/lib/auth/admin";
+import { logAudit } from "@/lib/audit/log";
 import { adminOrderMutationSchema, orderStatusSchema } from "@/lib/schemas";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import {
@@ -42,7 +43,7 @@ function normalizeOrderPayload(
 }
 
 export async function createOrderByAdmin(input: unknown) {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = adminOrderMutationSchema.safeParse(input);
   if (!parsed.success) {
@@ -62,12 +63,27 @@ export async function createOrderByAdmin(input: unknown) {
     return { ok: false as const, error: error.message };
   }
 
+  await logAudit(
+    {
+      action: "order.create",
+      category: "order",
+      targetType: "order",
+      targetLabel: parsed.data.customerName,
+      metadata: {
+        total: Number(parsed.data.totalAmount.toFixed(2)),
+        deliveryMethod: parsed.data.deliveryMethod,
+        status: parsed.data.status,
+      },
+    },
+    context,
+  );
+
   revalidatePath("/admin/orders");
   return { ok: true as const };
 }
 
 export async function updateOrderByAdmin(input: unknown) {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = adminOrderMutationSchema.safeParse(input);
   if (!parsed.success) {
@@ -92,6 +108,21 @@ export async function updateOrderByAdmin(input: unknown) {
   if (error) {
     return { ok: false as const, error: error.message };
   }
+
+  await logAudit(
+    {
+      action: "order.update",
+      category: "order",
+      targetType: "order",
+      targetId: parsed.data.id,
+      targetLabel: parsed.data.customerName,
+      metadata: {
+        total: Number(parsed.data.totalAmount.toFixed(2)),
+        status: parsed.data.status,
+      },
+    },
+    context,
+  );
 
   revalidatePath("/admin/orders");
   return { ok: true as const };
@@ -122,6 +153,16 @@ export async function updateOrderStatus(input: unknown) {
   }
 
   const newStatus = parsed.data.status;
+
+  // Cancelar pedido é exclusivo do ADMIN (papel "master"). STAFF nunca cancela,
+  // independentemente do status de origem — guard explícito, além de o cancelamento
+  // não constar na tabela de transições permitidas do STAFF abaixo.
+  if (newStatus === "CANCELLED" && context.role !== "ADMIN") {
+    return {
+      ok: false as const,
+      error: "Apenas o administrador pode cancelar pedidos.",
+    };
+  }
 
   // Staff can only do specific transitions
   if (context.role === "STAFF") {
@@ -161,6 +202,23 @@ export async function updateOrderStatus(input: unknown) {
     return { ok: false as const, error: error.message };
   }
 
+  await logAudit(
+    {
+      action:
+        newStatus === "CANCELLED"
+          ? "order.cancel"
+          : newStatus === "COMPLETED"
+            ? "order.complete"
+            : "order.status_change",
+      category: "order",
+      targetType: "order",
+      targetId: parsed.data.id,
+      targetLabel: parsed.data.id.slice(0, 8),
+      metadata: { from: currentOrder.status, to: newStatus },
+    },
+    context,
+  );
+
   // Send emails on status transitions
   try {
     if (newStatus === "READY_FOR_PICKUP") {
@@ -178,7 +236,7 @@ export async function updateOrderStatus(input: unknown) {
 
 // Complete order by verifying the pickup code
 export async function completeOrderByPickupCode(pickupCode: string) {
-  await requireAdminContext();
+  const context = await requireAdminContext();
 
   if (!pickupCode || pickupCode.trim().length === 0) {
     return { ok: false as const, error: "Código de retirada é obrigatório" };
@@ -217,6 +275,18 @@ export async function completeOrderByPickupCode(pickupCode: string) {
     return { ok: false as const, error: updateError.message };
   }
 
+  await logAudit(
+    {
+      action: "order.complete",
+      category: "order",
+      targetType: "order",
+      targetId: order.id,
+      targetLabel: order.id.slice(0, 8),
+      metadata: { via: "pickup_code" },
+    },
+    context,
+  );
+
   // Send completion email
   try {
     await sendOrderCompletedEmail(order.id);
@@ -229,7 +299,7 @@ export async function completeOrderByPickupCode(pickupCode: string) {
 }
 
 export async function deleteOrderByAdmin(input: unknown) {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = deleteOrderSchema.safeParse(input);
   if (!parsed.success) {
@@ -249,6 +319,17 @@ export async function deleteOrderByAdmin(input: unknown) {
   if (error) {
     return { ok: false as const, error: error.message };
   }
+
+  await logAudit(
+    {
+      action: "order.delete",
+      category: "order",
+      targetType: "order",
+      targetId: parsed.data.id,
+      targetLabel: parsed.data.id.slice(0, 8),
+    },
+    context,
+  );
 
   revalidatePath("/admin/orders");
   return { ok: true as const };

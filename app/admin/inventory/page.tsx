@@ -1,6 +1,7 @@
 import { requireAdminPage } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getInventoryMovements } from "@/lib/actions/inventory";
+import { parsePersistedProductVariants } from "@/lib/server/product-variants";
 import { InventoryPanel } from "@/components/admin/inventory-panel";
 
 export default async function AdminInventoryPage() {
@@ -10,7 +11,7 @@ export default async function AdminInventoryPage() {
 
   const { data: products } = await supabase
     .from("products")
-    .select("id,name,price,stock_quantity")
+    .select("id,name,price,stock_quantity,variants")
     .order("name", { ascending: true });
 
   const movementsResult = await getInventoryMovements(undefined, 100);
@@ -20,6 +21,11 @@ export default async function AdminInventoryPage() {
     name: p.name,
     price: Number(p.price),
     stock_quantity: p.stock_quantity ?? 0,
+    variants: parsePersistedProductVariants(p.variants).map((variant) => ({
+      id: variant.id,
+      label: variant.label,
+      stock_quantity: variant.stock_quantity,
+    })),
   }));
 
   const movements = movementsResult.ok ? movementsResult.data : [];

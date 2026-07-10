@@ -2,16 +2,18 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAdminContext } from '@/lib/auth/admin';
+import { logAudit } from '@/lib/audit/log';
 import {
   stockEntrySchema,
   stockAdjustmentSchema,
 } from '@/lib/schemas/inventory';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { applyVariantStockDelta } from '@/lib/server/product-variants';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
 export async function createStockEntry(input: unknown): Promise<ActionResult> {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = stockEntrySchema.safeParse(input);
   if (!parsed.success) {
@@ -42,6 +44,21 @@ export async function createStockEntry(input: unknown): Promise<ActionResult> {
     return { ok: false, error: error.message };
   }
 
+  await logAudit(
+    {
+      action: 'inventory.entry',
+      category: 'inventory',
+      targetType: 'product',
+      targetId: parsed.data.productId,
+      metadata: {
+        quantity: parsed.data.quantity,
+        invoiceTotal: parsed.data.invoiceTotal,
+        unitCost,
+      },
+    },
+    context,
+  );
+
   revalidatePath('/');
   revalidatePath('/admin/inventory');
   revalidatePath('/admin/products');
@@ -52,7 +69,7 @@ export async function createStockEntry(input: unknown): Promise<ActionResult> {
 export async function createStockAdjustment(
   input: unknown,
 ): Promise<ActionResult> {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = stockAdjustmentSchema.safeParse(input);
   if (!parsed.success) {
@@ -66,16 +83,53 @@ export async function createStockAdjustment(
 
   const supabase = createServiceRoleClient();
 
+  const { productId, type, quantity, variantId, variantLabel } = parsed.data;
+
   const { error } = await supabase.from('inventory_movements').insert({
-    product_id: parsed.data.productId,
-    type: parsed.data.type,
-    quantity: parsed.data.quantity,
+    product_id: productId,
+    type,
+    quantity,
+    variant_id: variantId ?? null,
+    variant_label: variantId ? variantLabel?.trim() || null : null,
     notes: parsed.data.notes?.trim() || null,
   });
 
   if (error) {
     return { ok: false, error: error.message };
   }
+
+  // When the movement targets a specific variant, the DB trigger skips the
+  // aggregate update — we own the JSONB variant math here and recompute the
+  // product's aggregate stock. ENTRY/ADJUSTMENT add stock, EXIT removes it.
+  if (variantId) {
+    const delta = type === 'EXIT' ? -quantity : quantity;
+    try {
+      await applyVariantStockDelta(supabase, productId, variantId, delta);
+    } catch (variantError) {
+      return {
+        ok: false,
+        error:
+          variantError instanceof Error
+            ? variantError.message
+            : 'Falha ao atualizar o estoque da variante.',
+      };
+    }
+  }
+
+  await logAudit(
+    {
+      action: 'inventory.adjustment',
+      category: 'inventory',
+      targetType: 'product',
+      targetId: productId,
+      metadata: {
+        type,
+        quantity,
+        ...(variantId ? { variantId, variantLabel } : {}),
+      },
+    },
+    context,
+  );
 
   revalidatePath('/');
   revalidatePath('/admin/inventory');
@@ -88,6 +142,7 @@ export type InventoryMovement = {
   id: string;
   product_id: string;
   product_name: string;
+  variant_label: string | null;
   type: 'ENTRY' | 'EXIT' | 'SALE' | 'ADJUSTMENT';
   quantity: number;
   invoice_total: number | null;
@@ -109,7 +164,7 @@ export async function getInventoryMovements(
   let query = supabase
     .from('inventory_movements')
     .select(
-      'id,product_id,type,quantity,invoice_total,unit_cost,notes,created_at,products(name)',
+      'id,product_id,type,quantity,invoice_total,unit_cost,notes,created_at,variant_label,products(name)',
     )
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -137,6 +192,7 @@ export async function getInventoryMovements(
         id: row.id as string,
         product_id: row.product_id as string,
         product_name: productName ?? 'Produto desconhecido',
+        variant_label: (row.variant_label as string | null) ?? null,
         type: row.type as InventoryMovement['type'],
         quantity: Number(row.quantity),
         invoice_total:

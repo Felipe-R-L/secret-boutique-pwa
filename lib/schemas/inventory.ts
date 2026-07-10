@@ -16,6 +16,11 @@ export const stockAdjustmentSchema = z
     productId: z.string().uuid(),
     quantity: z.coerce.number().int().positive("Quantidade deve ser positiva"),
     type: z.enum(["ENTRY", "EXIT", "ADJUSTMENT"]),
+    // Optional: target a specific product variant. When present, the
+    // adjustment decrements/increments that variant's stock inside the
+    // products.variants JSONB and recomputes the aggregate stock_quantity.
+    variantId: z.string().trim().min(1).optional(),
+    variantLabel: z.string().trim().max(200).optional(),
     notes: z.string().trim().max(500).optional(),
   })
   .strict();

@@ -13,6 +13,16 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { createClient } from "@/lib/supabase/client";
 import {
   updateOrderStatus,
@@ -29,12 +39,44 @@ type Order = {
   customer_email: string;
   delivery_method: string;
   room_number: string | null;
+  delivery_fee?: number | null;
+  delivery_cep?: string | null;
+  delivery_street?: string | null;
+  delivery_number?: string | null;
+  delivery_complement?: string | null;
+  delivery_neighborhood?: string | null;
+  delivery_city?: string | null;
+  delivery_state?: string | null;
   status: OrderStatus;
   total_amount: number;
   pickup_code: string | null;
   created_at: string;
   updated_at: string;
 };
+
+function deliveryShortLabel(order: Order): string {
+  if (order.delivery_method === "MOTEL_PICKUP") return "Portaria";
+  if (order.delivery_method === "HOME_DELIVERY") return "Domicílio";
+  return `Quarto ${order.room_number ?? ""}`.trim();
+}
+
+function formatFullAddress(order: Order): string | null {
+  if (order.delivery_method !== "HOME_DELIVERY") return null;
+  const line1 = [order.delivery_street, order.delivery_number]
+    .filter(Boolean)
+    .join(", ");
+  const withComplement = order.delivery_complement
+    ? `${line1} - ${order.delivery_complement}`
+    : line1;
+  const line2 = [
+    order.delivery_neighborhood,
+    [order.delivery_city, order.delivery_state].filter(Boolean).join("/"),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const cep = order.delivery_cep ? `CEP ${order.delivery_cep}` : "";
+  return [withComplement, line2, cep].filter(Boolean).join(" — ");
+}
 
 const statusConfig: Record<
   OrderStatus,
@@ -77,6 +119,12 @@ const statusConfig: Record<
   },
 };
 
+// Ação pendente de confirmação. `status` cobre tanto avanços normais quanto o
+// cancelamento (status === "CANCELLED"); `delete` remove o pedido em definitivo.
+type ConfirmAction =
+  | { kind: "status"; orderId: string; newStatus: OrderStatus }
+  | { kind: "delete"; orderId: string };
+
 interface OrdersDashboardProps {
   initialOrders: Order[];
   isAdmin: boolean;
@@ -93,6 +141,7 @@ export function OrdersDashboard({
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
   const [newOrderAlert, setNewOrderAlert] = useState(false);
   const [filter, setFilter] = useState<OrderStatus | "ALL">("ALL");
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   // Alerta visual + som quando um novo pedido pago chega e o ADMIN/STAFF está
   // com a página aberta. O push mobile é tratado separadamente no servidor.
@@ -210,6 +259,53 @@ export function OrdersDashboard({
     await deleteOrderByAdmin({ id: orderId });
     setLoading(orderId, false);
   };
+
+  // Executa a ação pendente depois que o admin confirma no modal.
+  const runConfirmedAction = async () => {
+    if (!confirmAction) return;
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (action.kind === "delete") {
+      await handleDelete(action.orderId);
+    } else {
+      await handleStatusUpdate(action.orderId, action.newStatus);
+    }
+  };
+
+  // Texto do modal conforme a ação. Cancelamento e exclusão recebem aviso
+  // explícito de que NÃO há estorno automático no Mercado Pago.
+  const confirmCopy = (() => {
+    if (!confirmAction) return null;
+    const order = orders.find((o) => o.id === confirmAction.orderId);
+    const who = order?.customer_name ?? "o cliente";
+
+    if (confirmAction.kind === "delete") {
+      return {
+        title: "Excluir pedido?",
+        description: `O pedido de ${who} será removido permanentemente do sistema. Esta ação não pode ser desfeita e não estorna o pagamento — faça o reembolso no painel do Mercado Pago, se necessário.`,
+        confirmLabel: "Excluir pedido",
+        destructive: true,
+      };
+    }
+
+    if (confirmAction.newStatus === "CANCELLED") {
+      return {
+        title: "Cancelar pedido?",
+        description: `O pedido de ${who} será marcado como Cancelado. Atenção: isto NÃO estorna o pagamento no Mercado Pago nem devolve o estoque — faça o reembolso manualmente, se for o caso.`,
+        confirmLabel: "Cancelar pedido",
+        destructive: true,
+      };
+    }
+
+    const statusLabel =
+      statusConfig[confirmAction.newStatus]?.label ?? confirmAction.newStatus;
+    return {
+      title: "Alterar status do pedido?",
+      description: `O pedido de ${who} passará para "${statusLabel}". O cliente pode ser notificado por e-mail.`,
+      confirmLabel: "Confirmar",
+      destructive: false,
+    };
+  })();
 
   const filteredOrders =
     filter === "ALL" ? orders : orders.filter((o) => o.status === filter);
@@ -345,7 +441,11 @@ export function OrdersDashboard({
           const config = statusConfig[order.status] ?? statusConfig.PENDING;
           const StatusIcon = config.icon;
           const isLoading = loadingActions.has(order.id);
-          const isRoomDelivery = order.delivery_method === "ROOM_DELIVERY";
+          // Entrega no quarto e entrega a domicílio são "entregues" (sem
+          // retirada por código); só a retirada na portaria usa o código.
+          const isRoomDelivery =
+            order.delivery_method === "ROOM_DELIVERY" ||
+            order.delivery_method === "HOME_DELIVERY";
           const statusLabel =
             order.status === "READY_FOR_PICKUP" && isRoomDelivery
               ? "Pronto p/ Entrega"
@@ -365,12 +465,14 @@ export function OrdersDashboard({
                     {order.customer_email}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {formatDate(order.created_at)} •{" "}
-                    {order.delivery_method === "MOTEL_PICKUP"
-                      ? "Portaria"
-                      : `Quarto ${order.room_number}`}{" "}
+                    {formatDate(order.created_at)} • {deliveryShortLabel(order)}{" "}
                     • {formatPrice(Number(order.total_amount))}
                   </p>
+                  {formatFullAddress(order) && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      📍 {formatFullAddress(order)}
+                    </p>
+                  )}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span
@@ -401,7 +503,13 @@ export function OrdersDashboard({
                     size="sm"
                     variant="outline"
                     disabled={isLoading}
-                    onClick={() => handleStatusUpdate(order.id, "PREPARING")}
+                    onClick={() =>
+                      setConfirmAction({
+                        kind: "status",
+                        orderId: order.id,
+                        newStatus: "PREPARING",
+                      })
+                    }
                     className="text-xs border-orange-200 text-orange-700 hover:bg-orange-50"
                   >
                     {isLoading ? "..." : "Iniciar Preparo"}
@@ -416,7 +524,11 @@ export function OrdersDashboard({
                     variant="outline"
                     disabled={isLoading}
                     onClick={() =>
-                      handleStatusUpdate(order.id, "READY_FOR_PICKUP")
+                      setConfirmAction({
+                        kind: "status",
+                        orderId: order.id,
+                        newStatus: "READY_FOR_PICKUP",
+                      })
                     }
                     className="text-xs border-green-200 text-green-700 hover:bg-green-50"
                   >
@@ -438,14 +550,22 @@ export function OrdersDashboard({
                       size="sm"
                       variant="outline"
                       disabled={isLoading}
-                      onClick={() => handleStatusUpdate(order.id, "COMPLETED")}
+                      onClick={() =>
+                        setConfirmAction({
+                          kind: "status",
+                          orderId: order.id,
+                          newStatus: "COMPLETED",
+                        })
+                      }
                       className="text-xs border-gray-300 text-gray-700 hover:bg-gray-50"
                     >
                       {isLoading
                         ? "..."
-                        : isRoomDelivery
+                        : order.delivery_method === "ROOM_DELIVERY"
                           ? `Entregue no Quarto ${order.room_number ?? ""}`.trim()
-                          : "Finalizar Entrega"}
+                          : order.delivery_method === "HOME_DELIVERY"
+                            ? "Confirmar Entrega"
+                            : "Finalizar Entrega"}
                       <CheckCircle className="ml-1 size-3" />
                     </Button>
                   )}
@@ -456,7 +576,13 @@ export function OrdersDashboard({
                     size="sm"
                     variant="ghost"
                     disabled={isLoading}
-                    onClick={() => handleStatusUpdate(order.id, "CANCELLED")}
+                    onClick={() =>
+                      setConfirmAction({
+                        kind: "status",
+                        orderId: order.id,
+                        newStatus: "CANCELLED",
+                      })
+                    }
                     className="text-xs text-muted-foreground hover:text-destructive"
                   >
                     Cancelar
@@ -468,7 +594,9 @@ export function OrdersDashboard({
                     size="sm"
                     variant="ghost"
                     disabled={isLoading}
-                    onClick={() => handleDelete(order.id)}
+                    onClick={() =>
+                      setConfirmAction({ kind: "delete", orderId: order.id })
+                    }
                     className="text-xs text-destructive hover:text-destructive"
                   >
                     <Trash2 className="size-3" />
@@ -487,6 +615,40 @@ export function OrdersDashboard({
           </div>
         )}
       </div>
+
+      {/* Modal único de confirmação reutilizado por status, cancelamento e exclusão */}
+      <AlertDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+      >
+        <AlertDialogContent>
+          {confirmCopy && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{confirmCopy.title}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {confirmCopy.description}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={runConfirmedAction}
+                  className={
+                    confirmCopy.destructive
+                      ? "bg-destructive text-white hover:bg-destructive/90"
+                      : undefined
+                  }
+                >
+                  {confirmCopy.confirmLabel}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { requireAdminContext } from "@/lib/auth/admin";
+import { logAudit } from "@/lib/audit/log";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 const subscriptionSchema = z
@@ -44,11 +45,16 @@ export async function savePushSubscription(input: unknown) {
     return { ok: false as const, error: error.message };
   }
 
+  await logAudit(
+    { action: "notification.subscribe", category: "notification" },
+    context,
+  );
+
   return { ok: true as const };
 }
 
 export async function deletePushSubscription(input: unknown) {
-  await requireAdminContext();
+  const context = await requireAdminContext();
 
   const parsed = z
     .object({ endpoint: z.string().url() })
@@ -66,6 +72,11 @@ export async function deletePushSubscription(input: unknown) {
   if (error) {
     return { ok: false as const, error: error.message };
   }
+
+  await logAudit(
+    { action: "notification.unsubscribe", category: "notification" },
+    context,
+  );
 
   return { ok: true as const };
 }

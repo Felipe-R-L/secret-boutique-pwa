@@ -323,7 +323,7 @@ export function ProductForm({
       if (uploadError) {
         if (uploadError.message.toLowerCase().includes("bucket not found")) {
           throw new Error(
-            "Erro no upload: bucket 'products' não encontrado. Rode a migration scripts/004_storage_products_bucket.sql no Supabase SQL Editor.",
+            "Erro no upload: bucket 'products' não encontrado. Rode a migration supabase/004_storage_products_bucket.sql no Supabase SQL Editor.",
           );
         }
         throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
@@ -655,44 +655,64 @@ export function ProductForm({
               </div>
 
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <Input
-                  value={variant.label}
-                  onChange={(event) =>
-                    updateVariant(variant.tempId, "label", event.target.value)
-                  }
-                  placeholder="Nome visível da variante"
-                />
-                <Input
-                  value={variant.sku}
-                  onChange={(event) =>
-                    updateVariant(variant.tempId, "sku", event.target.value)
-                  }
-                  placeholder="SKU"
-                />
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={variant.price}
-                  onChange={(event) =>
-                    updateVariant(variant.tempId, "price", event.target.value)
-                  }
-                  placeholder="Preço da variante"
-                />
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={variant.stockQuantity}
-                  onChange={(event) =>
-                    updateVariant(
-                      variant.tempId,
-                      "stockQuantity",
-                      event.target.value,
-                    )
-                  }
-                  placeholder="Estoque disponível"
-                />
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Nome
+                  </span>
+                  <Input
+                    value={variant.label}
+                    onChange={(event) =>
+                      updateVariant(variant.tempId, "label", event.target.value)
+                    }
+                    placeholder="Nome visível da variante"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    SKU
+                  </span>
+                  <Input
+                    value={variant.sku}
+                    onChange={(event) =>
+                      updateVariant(variant.tempId, "sku", event.target.value)
+                    }
+                    placeholder="SKU"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Valor (R$)
+                  </span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={variant.price}
+                    onChange={(event) =>
+                      updateVariant(variant.tempId, "price", event.target.value)
+                    }
+                    placeholder="Preço da variante"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Quantidade
+                  </span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={variant.stockQuantity}
+                    onChange={(event) =>
+                      updateVariant(
+                        variant.tempId,
+                        "stockQuantity",
+                        event.target.value,
+                      )
+                    }
+                    placeholder="Estoque disponível"
+                  />
+                </label>
               </div>
 
               <label className="flex items-center gap-2 text-sm">
@@ -787,14 +807,16 @@ export function ProductForm({
           Produto em destaque
         </label>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={inStock}
-            onChange={(event) => setInStock(event.target.checked)}
-          />
-          Em estoque para produto sem variantes
-        </label>
+        {variants.length === 0 && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={inStock}
+              onChange={(event) => setInStock(event.target.checked)}
+            />
+            Disponível para venda (em estoque)
+          </label>
+        )}
 
         <label className="flex items-center gap-2 text-sm">
           <input

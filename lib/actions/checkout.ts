@@ -1,6 +1,6 @@
 "use server";
 
-import { initializeCheckoutSchema } from "@/lib/schemas";
+import { initializeCheckoutSchema, HOME_DELIVERY_FEE } from "@/lib/schemas";
 import {
   createPixOrder,
   extractPixData,
@@ -102,6 +102,11 @@ export async function initializeCheckout(
       Number(selectedVariant?.price ?? product.price) * item.quantity;
   }
 
+  // Taxa fixa para entrega a domicílio; retirada/quarto não têm frete.
+  const deliveryFee =
+    parsed.data.deliveryMethod === "HOME_DELIVERY" ? HOME_DELIVERY_FEE : 0;
+  totalAmount += deliveryFee;
+
   totalAmount = Number(totalAmount.toFixed(2));
 
   // Generate a unique pickup code
@@ -119,6 +124,8 @@ export async function initializeCheckout(
     retries++;
   }
 
+  const isHomeDelivery = parsed.data.deliveryMethod === "HOME_DELIVERY";
+
   const orderInsert = {
     customer_name: parsed.data.customerName,
     customer_email: parsed.data.customerEmail,
@@ -127,6 +134,28 @@ export async function initializeCheckout(
       parsed.data.deliveryMethod === "ROOM_DELIVERY"
         ? (parsed.data.roomNumber?.trim() ?? null)
         : null,
+    delivery_fee: deliveryFee,
+    delivery_cep: isHomeDelivery
+      ? ((parsed.data.deliveryCep ?? "").replace(/\D/g, "") || null)
+      : null,
+    delivery_street: isHomeDelivery
+      ? (parsed.data.deliveryStreet?.trim() ?? null)
+      : null,
+    delivery_number: isHomeDelivery
+      ? (parsed.data.deliveryNumber?.trim() ?? null)
+      : null,
+    delivery_complement: isHomeDelivery
+      ? (parsed.data.deliveryComplement?.trim() || null)
+      : null,
+    delivery_neighborhood: isHomeDelivery
+      ? (parsed.data.deliveryNeighborhood?.trim() ?? null)
+      : null,
+    delivery_city: isHomeDelivery
+      ? (parsed.data.deliveryCity?.trim() ?? null)
+      : null,
+    delivery_state: isHomeDelivery
+      ? (parsed.data.deliveryState?.trim().toUpperCase() ?? null)
+      : null,
     payment_method: "PIX" as const,
     status: "PENDING" as const,
     total_amount: totalAmount,

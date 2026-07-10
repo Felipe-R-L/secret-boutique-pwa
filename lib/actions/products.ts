@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminContext } from "@/lib/auth/admin";
+import { logAudit } from "@/lib/audit/log";
 import { productMutationSchema } from "@/lib/schemas";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -20,8 +21,11 @@ const deleteProductSchema = z
   })
   .strict();
 
-export async function upsertProduct(input: unknown) {
-  await requireAdminContext({ write: true });
+export async function upsertProduct(
+  input: unknown,
+  options?: { skipAudit?: boolean },
+) {
+  const context = await requireAdminContext({ write: true });
 
   const parsed = productMutationSchema.safeParse(input);
   if (!parsed.success) {
@@ -111,6 +115,24 @@ export async function upsertProduct(input: unknown) {
     return { ok: false as const, error: error.message };
   }
 
+  if (!options?.skipAudit) {
+    await logAudit(
+      {
+        action: parsed.data.productId ? "product.update" : "product.create",
+        category: "product",
+        targetType: "product",
+        targetId: parsed.data.productId ?? null,
+        targetLabel: parsed.data.name,
+        metadata: {
+          category: parsed.data.category,
+          price: aggregatePrice,
+          variants: normalizedVariants.length,
+        },
+      },
+      context,
+    );
+  }
+
   revalidatePath("/");
   revalidatePath("/admin/products");
   revalidatePath("/admin");
@@ -118,7 +140,7 @@ export async function upsertProduct(input: unknown) {
 }
 
 export async function deleteProduct(input: unknown) {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const parsed = deleteProductSchema.safeParse(input);
   if (!parsed.success) {
@@ -137,6 +159,16 @@ export async function deleteProduct(input: unknown) {
   if (error) {
     return { ok: false as const, error: error.message };
   }
+
+  await logAudit(
+    {
+      action: "product.delete",
+      category: "product",
+      targetType: "product",
+      targetId: parsed.data.productId,
+    },
+    context,
+  );
 
   revalidatePath("/");
   revalidatePath("/admin/products");
@@ -227,7 +259,7 @@ export async function importProducts(
   rows: unknown,
   options?: ImportOptions,
 ): Promise<ImportReport> {
-  await requireAdminContext({ write: true });
+  const context = await requireAdminContext({ write: true });
 
   const mode: DuplicateMode = options?.duplicates ?? "skip";
 
@@ -369,7 +401,7 @@ export async function importProducts(
           : {}),
         specs: [],
         variants,
-      });
+      }, { skipAudit: true });
 
       if (!result.ok) {
         report.failedCount++;
@@ -417,7 +449,7 @@ export async function importProducts(
           : {}),
         specs: [],
         variants: [],
-      });
+      }, { skipAudit: true });
       if (!result.ok) {
         report.failedCount++;
         report.errors.push({
@@ -566,6 +598,21 @@ export async function importProducts(
     revalidatePath("/admin/inventory");
     revalidatePath("/admin/dashboard");
   }
+
+  await logAudit(
+    {
+      action: "product.import",
+      category: "product",
+      metadata: {
+        inserted: report.inserted,
+        updated: report.updated,
+        skipped: report.skipped,
+        failed: report.failedCount,
+        duplicates: mode,
+      },
+    },
+    context,
+  );
 
   return report;
 }
