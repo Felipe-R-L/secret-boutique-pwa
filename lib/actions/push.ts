@@ -13,6 +13,8 @@ const subscriptionSchema = z
       auth: z.string().min(1),
     }),
     userAgent: z.string().optional(),
+    // Reenvio automático ao abrir o painel (não é uma nova inscrição).
+    resync: z.boolean().optional(),
   })
   .strict();
 
@@ -45,10 +47,12 @@ export async function savePushSubscription(input: unknown) {
     return { ok: false as const, error: error.message };
   }
 
-  await logAudit(
-    { action: "notification.subscribe", category: "notification" },
-    context,
-  );
+  if (!parsed.data.resync) {
+    await logAudit(
+      { action: "notification.subscribe", category: "notification" },
+      context,
+    );
+  }
 
   return { ok: true as const };
 }

@@ -1,13 +1,14 @@
 "use client";
 
 import { formatCents } from "@/lib/money";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Package,
   Clock,
   CheckCircle,
   ArrowRight,
   Bell,
+  BellOff,
   Search,
   Trash2,
   CreditCard,
@@ -41,7 +42,12 @@ import {
 } from "@/lib/payment-labels";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 import { OrderItemsButton } from "@/components/admin/order-items-modal";
-import { playNotificationSound } from "@/lib/sound";
+import {
+  isAudioUnlocked,
+  playNotificationSound,
+  primeAudio,
+} from "@/lib/sound";
+import { ADMIN_ORDER_COLUMNS, ADMIN_ORDER_LIMIT } from "@/lib/admin-orders";
 
 type Order = {
   id: string;
@@ -72,6 +78,21 @@ function isAwaitingInPersonPayment(order: Order): boolean {
   return (
     order.status === "PENDING" &&
     (order.payment_method === "CARD" || order.payment_method === "CASH")
+  );
+}
+
+/**
+ * Pedido que a equipe precisa atender agora: Pix que acabou de ser pago
+ * (o webhook passa de PENDING para PAID) ou "pagar na entrega" recém-criado
+ * pelo site. Pedido lançado pela própria recepção não toca.
+ */
+function needsAttention(order: Order, previous: Order | undefined): boolean {
+  if (previous) {
+    return previous.status !== "PAID" && order.status === "PAID";
+  }
+  return (
+    order.status === "PAID" ||
+    (isAwaitingInPersonPayment(order) && order.channel !== "RECEPTION")
   );
 }
 
@@ -182,16 +203,76 @@ export function OrdersDashboard({
   const [filter, setFilter] = useState<OrderFilter>("ALL");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
-  // Alerta visual + som quando um novo pedido pago chega e o ADMIN/STAFF está
-  // com a página aberta. O push mobile é tratado separadamente no servidor.
-  const notifyNewOrder = useCallback(() => {
+  const [soundBlocked, setSoundBlocked] = useState(false);
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
+  const unseenRef = useRef(0);
+  const baseTitleRef = useRef("");
+
+  // Alerta visual + som quando chega pedido que pede ação. Com a aba em
+  // segundo plano, o título passa a contar os pedidos novos até ela voltar.
+  // O push (celular/desktop) é enviado separadamente pelo servidor.
+  const notifyNewOrders = useCallback((count: number) => {
+    if (count <= 0) return;
     setNewOrderAlert(true);
     playNotificationSound();
+    if (document.hidden) {
+      unseenRef.current += count;
+      document.title = `(${unseenRef.current}) Novo pedido • ${baseTitleRef.current}`;
+    }
+  }, []);
+
+  // O navegador só libera som depois de um clique/toque na página. Ao
+  // recarregar o painel o áudio volta bloqueado, então qualquer gesto serve.
+  useEffect(() => {
+    setSoundBlocked(!isAudioUnlocked());
+    const unlock = () => {
+      void primeAudio().then((ok) => {
+        setSoundBlocked(!ok);
+        if (ok) {
+          window.removeEventListener("pointerdown", unlock);
+          window.removeEventListener("keydown", unlock);
+        }
+      });
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, []);
 
   // Real-time subscription
   useEffect(() => {
+    baseTitleRef.current = document.title;
     const supabase = createClient();
+    let resyncTimer: ReturnType<typeof setTimeout> | null = null;
+    let disconnected = false;
+
+    // Recarrega a lista do banco. Cobre o que o realtime perdeu enquanto a
+    // aba estava em segundo plano ou a conexão caiu, e toca para o que chegou.
+    const resync = async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(ADMIN_ORDER_COLUMNS)
+        .order("created_at", { ascending: false })
+        .limit(ADMIN_ORDER_LIMIT);
+      if (error || !data) return;
+      const fresh = data as Order[];
+      const known = new Map(ordersRef.current.map((o) => [o.id, o]));
+      const missed = fresh.filter((o) =>
+        needsAttention(o, known.get(o.id)),
+      ).length;
+      setOrders(fresh);
+      notifyNewOrders(missed);
+    };
+
+    const scheduleResync = () => {
+      if (resyncTimer) clearTimeout(resyncTimer);
+      resyncTimer = setTimeout(() => void resync(), 500);
+    };
+
     const channel = supabase
       .channel("orders-realtime")
       .on(
@@ -204,45 +285,51 @@ export function OrdersDashboard({
         (payload) => {
           if (payload.eventType === "INSERT") {
             const newOrder = payload.new as Order;
-            setOrders((prev) => [newOrder, ...prev]);
-            // Pix chega como PAID pelo webhook; "pagar na entrega" chega
-            // pendente e precisa de atenção na hora. Pedido lançado pela
-            // própria recepção não toca.
-            if (
-              newOrder.status === "PAID" ||
-              (isAwaitingInPersonPayment(newOrder) &&
-                newOrder.channel !== "RECEPTION")
-            ) {
-              notifyNewOrder();
-            }
+            setOrders((prev) => [
+              newOrder,
+              ...prev.filter((o) => o.id !== newOrder.id),
+            ]);
+            if (needsAttention(newOrder, undefined)) notifyNewOrders(1);
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as Order;
-            // O fluxo real do cliente cria o pedido como PENDING e o webhook do
-            // Mercado Pago o transiciona para PAID via UPDATE — por isso o som
-            // precisa disparar aqui, não só no INSERT.
-            setOrders((prev) => {
-              const previous = prev.find((o) => o.id === updated.id);
-              if (
-                previous &&
-                previous.status !== "PAID" &&
-                updated.status === "PAID"
-              ) {
-                notifyNewOrder();
-              }
-              return prev.map((o) => (o.id === updated.id ? updated : o));
-            });
+            const previous = ordersRef.current.find((o) => o.id === updated.id);
+            setOrders((prev) =>
+              prev.map((o) => (o.id === updated.id ? updated : o)),
+            );
+            if (previous && needsAttention(updated, previous)) {
+              notifyNewOrders(1);
+            }
           } else if (payload.eventType === "DELETE") {
             const deleted = payload.old as { id: string };
             setOrders((prev) => prev.filter((o) => o.id !== deleted.id));
           }
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          // Reconectou depois de uma queda: busca o que passou nesse meio.
+          if (disconnected) scheduleResync();
+          disconnected = false;
+        } else {
+          disconnected = true;
+        }
+      });
+
+    const onVisibility = () => {
+      if (document.hidden) return;
+      unseenRef.current = 0;
+      document.title = baseTitleRef.current;
+      scheduleResync();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
+      if (resyncTimer) clearTimeout(resyncTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.title = baseTitleRef.current;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [notifyNewOrders]);
 
   const setLoading = useCallback((id: string, loading: boolean) => {
     setLoadingActions((prev) => {
@@ -469,6 +556,18 @@ export function OrdersDashboard({
           <p className="text-xs text-gray-600">Finalizados</p>
         </div>
       </div>
+
+      {soundBlocked && (
+        <button
+          type="button"
+          onClick={() => void primeAudio().then((ok) => setSoundBlocked(!ok))}
+          className="flex w-full items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-left text-sm text-amber-900"
+        >
+          <BellOff className="size-4 shrink-0" />
+          Som de novos pedidos bloqueado pelo navegador. Toque aqui (ou em
+          qualquer lugar da página) para ativar.
+        </button>
+      )}
 
       {/* New order alert */}
       {newOrderAlert && (

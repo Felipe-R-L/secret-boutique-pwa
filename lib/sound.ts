@@ -20,11 +20,18 @@ function getCtx(): AudioContext | null {
 }
 
 /** Chame dentro de um gesto do usuário para liberar o áudio. */
-export function primeAudio() {
+export async function primeAudio(): Promise<boolean> {
   const ctx = getCtx();
-  if (ctx && ctx.state === "suspended") {
-    ctx.resume().catch(() => {});
+  if (!ctx) return false;
+  if (ctx.state === "suspended") {
+    await ctx.resume().catch(() => {});
   }
+  return ctx.state === "running";
+}
+
+/** true quando o navegador já liberou o som (houve um gesto na página). */
+export function isAudioUnlocked(): boolean {
+  return getCtx()?.state === "running";
 }
 
 /** Toca um "ding" curto de dois tons. Seguro de chamar a qualquer momento. */

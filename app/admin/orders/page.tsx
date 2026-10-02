@@ -1,4 +1,5 @@
 import { requireAdminPage } from "@/lib/auth/admin";
+import { ADMIN_ORDER_COLUMNS, ADMIN_ORDER_LIMIT } from "@/lib/admin-orders";
 import { createClient } from "@/lib/supabase/server";
 import { OrdersDashboard } from "@/components/admin/orders-dashboard";
 import { PushNotifications } from "@/components/admin/push-notifications";
@@ -9,11 +10,9 @@ export default async function AdminOrdersPage() {
   const supabase = await createClient();
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
-    .select(
-      "id,customer_name,customer_email,delivery_method,room_number,delivery_fee_cents,delivery_cep,delivery_street,delivery_number,delivery_complement,delivery_neighborhood,delivery_city,delivery_state,payment_method,cash_change_for_cents,channel,status,total_cents,pickup_code,created_at,updated_at",
-    )
+    .select(ADMIN_ORDER_COLUMNS)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(ADMIN_ORDER_LIMIT);
 
   if (ordersError) {
     return (

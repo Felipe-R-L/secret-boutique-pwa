@@ -55,6 +55,11 @@ export async function sendPushToAdmins(payload: PushPayload): Promise<void> {
   const body = JSON.stringify(payload);
   const staleEndpoints: string[] = [];
 
+  // Pedido novo é urgente: "high" faz o Android entregar mesmo em modo
+  // soneca (com "normal", o padrão, o aviso pode chegar minutos ou horas
+  // depois). Um aviso de pedido com mais de 6h já não serve para nada.
+  const options = { urgency: "high" as const, TTL: 6 * 60 * 60 };
+
   await Promise.all(
     subs.map(async (sub) => {
       try {
@@ -64,14 +69,26 @@ export async function sendPushToAdmins(payload: PushPayload): Promise<void> {
             keys: { p256dh: sub.p256dh, auth: sub.auth },
           },
           body,
+          options,
         );
       } catch (err: unknown) {
-        const statusCode = (err as { statusCode?: number })?.statusCode;
+        const { statusCode, body: errorBody } = (err ?? {}) as {
+          statusCode?: number;
+          body?: string;
+        };
+        // 404/410: inscrição expirou; o painel reinscreve o aparelho sozinho
+        // na próxima vez que for aberto (components/admin/push-notifications).
+        // 403 costuma ser VAPID (chave trocada ou VAPID_SUBJECT inválido): fica
+        // só no log, com o corpo da resposta, para não mascarar o problema.
         if (statusCode === 404 || statusCode === 410) {
           staleEndpoints.push(sub.endpoint);
-        } else {
-          console.error("[push] Erro ao enviar push", statusCode ?? err);
         }
+        console.error(
+          "[push] Erro ao enviar push",
+          statusCode ?? err,
+          errorBody ?? "",
+          new URL(sub.endpoint).host,
+        );
       }
     }),
   );

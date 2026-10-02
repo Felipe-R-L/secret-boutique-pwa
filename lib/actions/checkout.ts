@@ -1,6 +1,6 @@
 "use server";
 
-import { centsToDecimalString, formatCents } from "@/lib/money";
+import { centsToDecimalString } from "@/lib/money";
 import {
   initializeCheckoutSchema,
   HOME_DELIVERY_FEE_CENTS,
@@ -16,8 +16,7 @@ import {
   parsePersistedProductVariants,
 } from "@/lib/server/product-variants";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import { sendPushToAdmins } from "@/lib/push/server";
-import { describeInPersonPayment } from "@/lib/payment-labels";
+import { notifyStaffOfNewOrder } from "@/lib/notifications/new-order";
 import { randomBytes } from "node:crypto";
 
 // Email "de fachada" para montar o pedido Pix no Mercado Pago quando o pedido
@@ -267,23 +266,7 @@ export async function initializeCheckout(
   // Pix avisa a equipe quando o pagamento confirma (webhook). No presencial
   // não há confirmação online: o aviso sai agora, para a recepção preparar.
   if (inPerson) {
-    try {
-      const total = formatCents(totalCents);
-      const destino = roomNumber
-        ? `Quarto ${roomNumber}`
-        : "Retirada na recepção";
-      await sendPushToAdmins({
-        title: "Novo pedido — pagar na entrega 🛍️",
-        body: `${destino} • ${total} • ${describeInPersonPayment(
-          paymentMethod,
-          orderInsert.cash_change_for_cents,
-        )}`,
-        url: "/admin/orders",
-        tag: `order-${orderData.id}`,
-      });
-    } catch (pushError) {
-      console.error("Failed sending push notification", pushError);
-    }
+    await notifyStaffOfNewOrder(orderData.id);
   }
 
   return {
@@ -388,6 +371,10 @@ export async function checkOrderStatus(orderId: unknown) {
         } catch (emailErr) {
           console.error("Failed to send voucher email:", emailErr);
         }
+
+        // Confirmado por aqui, o webhook vai ignorar o pedido (já não está
+        // PENDING) — então o aviso à equipe precisa sair deste caminho.
+        await notifyStaffOfNewOrder(data.id);
 
         return {
           ok: true as const,
