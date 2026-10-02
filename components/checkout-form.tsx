@@ -2,7 +2,7 @@
 
 import React from "react";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   QrCode,
@@ -36,6 +36,7 @@ import { HOME_DELIVERY_FEE } from "@/lib/schemas";
 import { useOrderHistoryStore } from "@/lib/store/order-history-store";
 import { fetchAddressByCep, formatCep } from "@/lib/viacep";
 import { track } from "@vercel/analytics";
+import { trackEvent } from "@/lib/analytics/client";
 
 type DeliveryMethod = "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
 type PaymentMethod = "CARD" | "CASH" | "PIX";
@@ -211,6 +212,23 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     emailsMatch;
   const canGoToStepThree = isPix ? pixDataComplete : !cashChangeInvalid;
 
+  // Funil: cada etapa vista conta (a 1 é abrir o checkout). Os valores de
+  // entrega/pagamento vão junto para saber em que combinação a pessoa parou.
+  const lastTrackedStep = useRef(0);
+  useEffect(() => {
+    if (lastTrackedStep.current === step) return;
+    lastTrackedStep.current = step;
+    trackEvent("checkout_step", {
+      props: {
+        step,
+        delivery: deliveryMethod,
+        payment: step >= 2 ? effectivePayment : null,
+      },
+    });
+    // Só a troca de etapa dispara; mudar opção dentro da etapa não.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   const handleCepLookup = async (rawCep: string) => {
     setCepError("");
     const digits = rawCep.replace(/\D/g, "");
@@ -305,8 +323,16 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
     if (!result.ok) {
       setSubmitError(result.error);
+      trackEvent("checkout_error", {
+        props: { reason: result.error.slice(0, 120) },
+      });
       return;
     }
+
+    trackEvent("order_created", {
+      value: result.totalAmount,
+      props: { payment: effectivePayment, delivery: deliveryMethod },
+    });
 
     if (!isPix) {
       // Sem pagamento online: o pedido já está com a recepção.
@@ -673,7 +699,12 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
                   <button
                     key={option.method}
                     type="button"
-                    onClick={() => setPaymentMethod(option.method)}
+                    onClick={() => {
+                      setPaymentMethod(option.method);
+                      trackEvent("payment_selected", {
+                        props: { method: option.method },
+                      });
+                    }}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-xl border p-4 text-left transition",
                       selected

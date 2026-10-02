@@ -1,5 +1,6 @@
 "use client";
 
+import { trackEvent } from "@/lib/analytics/client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sparkles, Leaf } from "lucide-react";
@@ -43,7 +44,10 @@ export function AgeGate() {
         <div className="mt-5 flex flex-col gap-2.5">
           <Button
             className="h-12 rounded-full text-sm font-semibold"
-            onClick={() => setMode("adult")}
+            onClick={() => {
+              trackEvent("age_gate_choice", { props: { choice: "adult" } });
+              setMode("adult");
+            }}
           >
             <Sparkles className="mr-2 size-4" />
             Tenho 18 anos ou mais — catálogo completo
@@ -51,7 +55,10 @@ export function AgeGate() {
           <Button
             variant="outline"
             className="h-12 rounded-full text-sm font-semibold"
-            onClick={() => setMode("sfw")}
+            onClick={() => {
+              trackEvent("age_gate_choice", { props: { choice: "sfw" } });
+              setMode("sfw");
+            }}
           >
             <Leaf className="mr-2 size-4" />
             Ver apenas produtos livres (SFW)

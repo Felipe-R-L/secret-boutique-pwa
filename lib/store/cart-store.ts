@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { trackEvent } from "@/lib/analytics/client";
 
 export interface ProductSpecs {
   [key: string]: string;
@@ -77,6 +78,11 @@ export const useCartStore = create<CartStore>()(
       items: [],
 
   addItem: (product: Product, variant?: ProductVariant) => {
+    trackEvent("add_to_cart", {
+      productId: product.id,
+      value: variant?.price ?? product.price,
+      props: { qty: 1 },
+    });
     set((state) => {
       const existingItem = state.items.find(
         (item) =>
@@ -100,6 +106,18 @@ export const useCartStore = create<CartStore>()(
   },
 
   removeItem: (productId: string, variantId?: string) => {
+    const removed = get().items.find(
+      (item) =>
+        getCartItemKey(item.product.id, item.variant?.id) ===
+        getCartItemKey(productId, variantId),
+    );
+    if (removed) {
+      trackEvent("remove_from_cart", {
+        productId,
+        value:
+          (removed.variant?.price ?? removed.product.price) * removed.quantity,
+      });
+    }
     set((state) => ({
       items: state.items.filter(
         (item) =>

@@ -95,7 +95,7 @@ export function HeroSection({
       {/* Spotlight atrás do card em telas grandes — dá palco sem competir */}
       <div className="pointer-events-none absolute right-0 top-1/2 hidden size-[42rem] -translate-y-1/2 translate-x-1/4 rounded-full bg-pastel-rose/25 blur-3xl lg:block" />
 
-      <div className="relative mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-12 lg:py-16">
+      <div className="relative mx-auto max-w-7xl px-4 pb-10 pt-6 md:px-6 md:py-12 lg:py-14">
         <div className="grid gap-8 lg:grid-cols-2 lg:gap-12 xl:gap-16">
           {/* Left content */}
           <div className="flex flex-col justify-center space-y-6 lg:space-y-8">
@@ -133,46 +133,39 @@ export function HeroSection({
             </div>
 
             {/* Stats — números fracos jogam contra a prova social; só aparecem
-                quando há volume suficiente para convencer */}
-            <div className="flex items-center gap-6 pt-4 lg:gap-10">
-              {stats.completedOrdersCount >= 20 && (
-                <div className="rounded-2xl bg-pastel-lavender/20 px-4 py-3">
-                  <p className="font-sans text-2xl font-semibold text-foreground md:text-3xl">
-                    +{stats.completedOrdersCount}
-                  </p>
-                  <p
-                    className="text-xs text-muted-foreground"
-                    style={{ fontFamily: "Inter, sans-serif" }}
-                  >
-                    Retiradas Anônimas
-                  </p>
-                </div>
-              )}
-              {stats.averageRating !== null && stats.totalReviews > 0 && (
-                <div className="rounded-2xl bg-pastel-peach/20 px-4 py-3">
-                  <p className="font-sans text-2xl font-semibold text-foreground md:text-3xl">
-                    {stats.averageRating.toFixed(1)}
-                  </p>
-                  <p
-                    className="text-xs text-muted-foreground"
-                    style={{ fontFamily: "Inter, sans-serif" }}
-                  >
-                    Avaliação ({stats.totalReviews})
-                  </p>
-                </div>
-              )}
-              <div className="rounded-2xl bg-pastel-sage/20 px-4 py-3">
-                <p className="font-sans text-2xl font-semibold text-foreground md:text-3xl">
-                  14h–5h
-                </p>
-                <p
-                  className="text-xs text-muted-foreground"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Retirada Anônima
-                </p>
+                quando há volume suficiente para convencer. O horário de
+                retirada já está na faixa do topo, não se repete aqui. */}
+            {(stats.completedOrdersCount >= 20 ||
+              (stats.averageRating !== null && stats.totalReviews > 0)) && (
+              <div className="flex items-center gap-6 lg:gap-10">
+                {stats.completedOrdersCount >= 20 && (
+                  <div className="rounded-2xl bg-pastel-lavender/20 px-4 py-3">
+                    <p className="font-sans text-2xl font-semibold text-foreground md:text-3xl">
+                      +{stats.completedOrdersCount}
+                    </p>
+                    <p
+                      className="text-xs text-muted-foreground"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Retiradas Anônimas
+                    </p>
+                  </div>
+                )}
+                {stats.averageRating !== null && stats.totalReviews > 0 && (
+                  <div className="rounded-2xl bg-pastel-peach/20 px-4 py-3">
+                    <p className="font-sans text-2xl font-semibold text-foreground md:text-3xl">
+                      {stats.averageRating.toFixed(1)}
+                    </p>
+                    <p
+                      className="text-xs text-muted-foreground"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Avaliação ({stats.totalReviews})
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
 
           {/* Right content - Featured product carousel */}
@@ -224,7 +217,7 @@ export function HeroSection({
                         onClick={() => onProductSelect(product)}
                         className="group block w-full overflow-hidden rounded-3xl bg-card text-left shadow-2xl transition-shadow duration-500 hover:shadow-3xl"
                       >
-                        <div className="relative aspect-4/5 md:aspect-3/4 lg:aspect-square">
+                        <div className="relative aspect-4/3 lg:aspect-5/4">
                           <Image
                             src={getPrimaryProductImage(product)}
                             alt={product.name}
@@ -348,7 +341,8 @@ export function HeroSection({
                         api?.scrollTo(index);
                       }}
                       className={cn(
-                        "h-2 rounded-full transition-all",
+                        // Ponto pequeno, área de toque de 44px via ::after
+                        "relative h-2 rounded-full transition-all after:absolute after:-inset-x-1.5 after:-inset-y-[18px] after:content-['']",
                         index === selected
                           ? "w-6 bg-foreground"
                           : "w-2 bg-foreground/25 hover:bg-foreground/40",

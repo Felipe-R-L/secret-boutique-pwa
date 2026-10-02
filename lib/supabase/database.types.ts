@@ -239,6 +239,44 @@ export type Database = {
           updated_at?: string;
         };
       };
+      analytics_events: {
+        Row: {
+          id: number;
+          visitor_id: string;
+          session_id: string;
+          event: string;
+          path: string | null;
+          source: string | null;
+          product_id: string | null;
+          value: number | null;
+          props: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          visitor_id: string;
+          session_id: string;
+          event: string;
+          path?: string | null;
+          source?: string | null;
+          product_id?: string | null;
+          value?: number | null;
+          props?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          visitor_id?: string;
+          session_id?: string;
+          event?: string;
+          path?: string | null;
+          source?: string | null;
+          product_id?: string | null;
+          value?: number | null;
+          props?: Json;
+          created_at?: string;
+        };
+      };
       order_items: {
         Row: {
           id: number;

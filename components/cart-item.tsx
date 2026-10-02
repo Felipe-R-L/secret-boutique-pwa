@@ -79,7 +79,8 @@ export function CartItem({ item }: CartItemProps) {
           <div className="flex items-center gap-2 rounded-lg bg-secondary p-0.5">
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
+              className="size-10"
               onClick={() =>
                 updateQuantity(
                   item.product.id,
@@ -91,12 +92,13 @@ export function CartItem({ item }: CartItemProps) {
             >
               <Minus className="size-3" />
             </Button>
-            <span className="w-6 text-center text-sm font-medium">
+            <span className="w-6 text-center text-sm font-medium tabular-nums">
               {item.quantity}
             </span>
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
+              className="size-10"
               onClick={() =>
                 updateQuantity(
                   item.product.id,
@@ -112,9 +114,9 @@ export function CartItem({ item }: CartItemProps) {
 
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             onClick={handleRemove}
-            className="text-muted-foreground hover:text-destructive"
+            className="size-10 text-muted-foreground hover:text-destructive"
             aria-label="Remover item"
           >
             <Trash2 className="size-4" />

@@ -94,11 +94,11 @@ export default function SobrePage() {
               className="text-base leading-relaxed text-muted-foreground md:text-lg"
               style={{ fontFamily: "Inter, sans-serif" }}
             >
-              Aqui, não criamos cadastro. Pedimos só o essencial: nome e email
-              para registrar o pedido e enviar o seu comprovante — e o CPF,
-              exigido por lei para o PIX, vai direto para o processador de
-              pagamento, sem ficar guardado conosco. Você compra, recebe um
-              código, e retira quando quiser — simples assim. Porque
+              Aqui, não criamos cadastro. Quem paga no cartão ou em dinheiro na
+              entrega não informa nenhum dado — só o número do quarto. Se
+              preferir o Pix, pedimos nome e email para o comprovante, e o
+              CPF, exigido por lei para o Pix, vai direto para o processador
+              de pagamento, sem ficar guardado conosco. Simples assim. Porque
               privacidade não é um luxo, é um direito.
             </p>
           </div>

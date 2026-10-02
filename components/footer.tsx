@@ -1,6 +1,34 @@
 import Link from "next/link";
 import { Shield, Package, Lock, Heart, Instagram } from "lucide-react";
 import { INSTAGRAM_URL, INSTAGRAM_HANDLE, WHATSAPP_URL } from "@/lib/site-contact";
+import { TrackedLink } from "@/components/analytics/tracked-link";
+
+const trustBadges = [
+  {
+    icon: Package,
+    title: "Embalagem Discreta",
+    description: "Embalagem neutra sem identificação",
+    iconBg: "bg-pastel-peach/40",
+  },
+  {
+    icon: Shield,
+    title: "Compra Segura",
+    description: "Proteção total dos seus dados",
+    iconBg: "bg-pastel-sage/40",
+  },
+  {
+    icon: Lock,
+    title: "Privacidade",
+    description: "Sua privacidade é nossa prioridade",
+    iconBg: "bg-pastel-lavender/40",
+  },
+  {
+    icon: Heart,
+    title: "Qualidade Premium",
+    description: "Produtos selecionados com cuidado",
+    iconBg: "bg-pastel-rose/40",
+  },
+];
 
 const navLinks = [
   { href: "/", label: "Loja" },
@@ -25,69 +53,31 @@ function WhatsappGlyph({ className }: { className?: string }) {
 export function Footer() {
   return (
     <footer className="border-t border-border bg-card">
-      {/* Trust badges section */}
-      <div className="mx-auto max-w-7xl px-4 py-12 md:px-6 lg:py-16">
-        <div className="grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-pastel-peach/40">
-              <Package className="size-5 text-foreground/70" />
-            </div>
-            <div>
-              <h4 className="font-medium text-foreground">Embalagem Discreta</h4>
-              <p
-                className="mt-1 text-xs text-muted-foreground"
-                style={{ fontFamily: "Inter, sans-serif" }}
+      {/* Selos de confiança: linhas compactas (ícone + texto) em vez de
+          quatro cartões altos — no celular ocupavam uma tela inteira. */}
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6 lg:py-10">
+        <ul className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+          {trustBadges.map((badge) => (
+            <li key={badge.title} className="flex items-center gap-3">
+              <div
+                className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${badge.iconBg}`}
               >
-                Embalagem neutra sem identificação
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-pastel-sage/40">
-              <Shield className="size-5 text-foreground/70" />
-            </div>
-            <div>
-              <h4 className="font-medium text-foreground">Compra Segura</h4>
-              <p
-                className="mt-1 text-xs text-muted-foreground"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                Proteção total dos seus dados
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-pastel-lavender/40">
-              <Lock className="size-5 text-foreground/70" />
-            </div>
-            <div>
-              <h4 className="font-medium text-foreground">Privacidade</h4>
-              <p
-                className="mt-1 text-xs text-muted-foreground"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                Sua privacidade é nossa prioridade
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-pastel-rose/40">
-              <Heart className="size-5 text-foreground/70" />
-            </div>
-            <div>
-              <h4 className="font-medium text-foreground">Qualidade Premium</h4>
-              <p
-                className="mt-1 text-xs text-muted-foreground"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                Produtos selecionados com cuidado
-              </p>
-            </div>
-          </div>
-        </div>
+                <badge.icon className="size-5 text-foreground/70" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {badge.title}
+                </p>
+                <p
+                  className="text-xs text-muted-foreground"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  {badge.description}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Navigation links */}
@@ -110,33 +100,37 @@ export function Footer() {
               </p>
 
               <div className="mt-2 flex items-center gap-3">
-                <a
+                <TrackedLink
+                  event="instagram_click"
+                  from="footer"
                   href={INSTAGRAM_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Instagram @${INSTAGRAM_HANDLE}`}
-                  className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-pastel-rose/40 hover:text-foreground"
+                  className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-pastel-rose/40 hover:text-foreground"
                 >
                   <Instagram className="size-4" />
-                </a>
-                <a
+                </TrackedLink>
+                <TrackedLink
+                  event="whatsapp_click"
+                  from="footer"
                   href={WHATSAPP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="WhatsApp"
-                  className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-[#25D366]/15 hover:text-[#25D366]"
+                  className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-[#25D366]/15 hover:text-[#25D366]"
                 >
                   <WhatsappGlyph className="size-4" />
-                </a>
+                </TrackedLink>
               </div>
             </div>
 
-            <nav className="flex flex-wrap justify-center gap-4 md:gap-6">
+            <nav className="flex flex-wrap justify-center gap-x-4 md:gap-x-6">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  className="py-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   {link.label}

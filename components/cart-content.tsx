@@ -1,15 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { trackEvent } from "@/lib/analytics/client";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  ArrowLeft,
-  ShoppingBag,
-  ArrowRight,
-  Sparkles,
-  Plus,
-} from "lucide-react";
+import { ArrowLeft, ShoppingBag, ArrowRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartItem } from "@/components/cart-item";
 import { CheckoutForm } from "@/components/checkout-form";
@@ -32,6 +27,17 @@ export function CartContent({ products }: CartContentProps) {
   const getTotal = useCartStore((state) => state.getTotal);
   const addItem = useCartStore((state) => state.addItem);
   const isAdultMode = useAgeModeStore((state) => state.mode === "adult");
+
+  // Uma vez por visita ao carrinho, já com o carrinho reidratado.
+  const cartViewTracked = useRef(false);
+  useEffect(() => {
+    if (cartViewTracked.current || items.length === 0) return;
+    cartViewTracked.current = true;
+    trackEvent("cart_view", {
+      value: getTotal(),
+      props: { items: items.length },
+    });
+  }, [items, getTotal]);
 
   const formatPrice = (price: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -60,7 +66,7 @@ export function CartContent({ products }: CartContentProps) {
     return [
       ...pool.filter((product) => cartCategories.has(product.category)),
       ...pool.filter((product) => !cartCategories.has(product.category)),
-    ].slice(0, 4);
+    ].slice(0, 6);
   }, [products, items, isAdultMode]);
 
   return (
@@ -85,7 +91,7 @@ export function CartContent({ products }: CartContentProps) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-4xl p-4 md:px-6 md:py-6">
+      <main className="mx-auto w-full max-w-4xl p-4 md:px-6 md:py-6 lg:max-w-6xl">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-pastel-lavender/20">
@@ -108,91 +114,87 @@ export function CartContent({ products }: CartContentProps) {
             </Button>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="space-y-3">
-              {items.map((item) => (
-                <CartItem
-                  key={getCartItemKey(item.product.id, item.variant?.id)}
-                  item={item}
-                />
-              ))}
-            </div>
+          // Celular: itens → sugestões compactas → checkout, sem empurrar o
+          // formulário para baixo. Desktop: checkout fixo na coluna da direita.
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-10">
+            <div className="min-w-0 space-y-8">
+              <div className="space-y-3">
+                {items.map((item) => (
+                  <CartItem
+                    key={getCartItemKey(item.product.id, item.variant?.id)}
+                    item={item}
+                  />
+                ))}
+              </div>
 
-            {/* Cross-sell */}
-            {suggestions.length > 0 && (
-              <section aria-label="Sugestões de produtos">
-                <h2 className="mb-3 text-sm font-semibold text-foreground">
-                  Você também pode gostar
-                </h2>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {suggestions.map((product) => (
-                    <div
-                      key={product.id}
-                      className="overflow-hidden rounded-2xl border border-border bg-card"
+              {/* Cross-sell em fileira com rolagem lateral */}
+              {suggestions.length > 0 && (
+                <section aria-label="Sugestões de produtos">
+                  <div className="mb-3 flex items-baseline justify-between gap-3">
+                    <h2 className="text-sm font-semibold text-foreground">
+                      Você também pode gostar
+                    </h2>
+                    <Link
+                      href="/"
+                      className="-my-2 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline"
+                      style={{ fontFamily: "Inter, sans-serif" }}
                     >
-                      <div className="relative aspect-square bg-muted">
-                        <Image
-                          src={getPrimaryProductImage(product)}
-                          alt={product.name}
-                          fill
-                          className="object-cover"
-                          sizes="(max-width: 640px) 50vw, 200px"
-                        />
-                      </div>
-                      <div className="space-y-2 p-2.5">
-                        <p
-                          className="line-clamp-2 min-h-8 text-xs font-medium leading-snug text-foreground"
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          {product.name}
-                        </p>
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-sans text-sm font-semibold text-foreground">
-                            {formatPrice(product.price)}
-                          </span>
-                          <Button
-                            size="icon-sm"
-                            className="size-7 shrink-0 rounded-full"
-                            aria-label={`Adicionar ${product.name} ao carrinho`}
-                            onClick={() => {
-                              addItem(product);
-                              showAddedToCartToast(product.name);
-                            }}
+                      Ver catálogo
+                    </Link>
+                  </div>
+                  <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 md:-mx-6 md:scroll-px-6 md:px-6 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0">
+                    {suggestions.map((product) => (
+                      <div
+                        key={product.id}
+                        className="w-36 shrink-0 snap-start overflow-hidden rounded-2xl border border-border bg-card lg:w-auto"
+                      >
+                        <div className="relative aspect-square bg-muted">
+                          <Image
+                            src={getPrimaryProductImage(product)}
+                            alt={product.name}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 1024px) 144px, 220px"
+                          />
+                        </div>
+                        <div className="space-y-2 p-2.5">
+                          <p
+                            className="line-clamp-2 min-h-8 text-xs font-medium leading-snug text-foreground"
+                            style={{ fontFamily: "Inter, sans-serif" }}
                           >
-                            <Plus className="size-3.5" />
-                          </Button>
+                            {product.name}
+                          </p>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-sans text-sm font-semibold text-foreground">
+                              {formatPrice(product.price)}
+                            </span>
+                            <Button
+                              size="icon-sm"
+                              className="relative size-9 shrink-0 rounded-full after:absolute after:-inset-1 after:content-['']"
+                              aria-label={`Adicionar ${product.name} ao carrinho`}
+                              onClick={() => {
+                                addItem(product);
+                                showAddedToCartToast(product.name);
+                              }}
+                            >
+                              <Plus className="size-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Continue shopping CTA */}
-            <div className="flex items-center gap-3 rounded-2xl bg-pastel-peach/15 p-4">
-              <Sparkles className="size-5 shrink-0 text-foreground/50" />
-              <p
-                className="flex-1 text-sm text-muted-foreground"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                Quer levar mais alguma coisa? Explore nosso catálogo completo.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 rounded-full"
-                asChild
-              >
-                <Link href="/">Ver mais</Link>
-              </Button>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
 
-            <CheckoutForm
-              onSuccess={() => {
-                // handled by checkout form navigation
-              }}
-            />
+            <div className="lg:sticky lg:top-20 lg:rounded-3xl lg:border lg:border-border lg:bg-card lg:p-6">
+              <CheckoutForm
+                onSuccess={() => {
+                  // handled by checkout form navigation
+                }}
+              />
+            </div>
           </div>
         )}
       </main>

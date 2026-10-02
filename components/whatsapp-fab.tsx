@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { WHATSAPP_URL } from "@/lib/site-contact";
+import { trackEvent } from "@/lib/analytics/client";
 
 function WhatsappIcon({ className }: { className?: string }) {
   return (
@@ -19,8 +20,10 @@ function WhatsappIcon({ className }: { className?: string }) {
 export function WhatsappFab() {
   const pathname = usePathname();
 
-  // Botão é da vitrine/loja — não aparece no painel admin nem nas telas de auth.
-  if (pathname?.startsWith("/admin") || pathname?.startsWith("/auth")) {
+  // Botão é da vitrine/loja — não aparece no painel admin nem nas telas de
+  // auth, nem no carrinho/checkout, onde cobria as opções do formulário.
+  const hiddenPrefixes = ["/admin", "/auth", "/cart", "/checkout"];
+  if (hiddenPrefixes.some((prefix) => pathname?.startsWith(prefix))) {
     return null;
   }
 
@@ -30,6 +33,7 @@ export function WhatsappFab() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Falar no WhatsApp"
+      onClick={() => trackEvent("whatsapp_click", { props: { from: "fab" } })}
       className="group fixed bottom-[5.5rem] right-4 z-40 flex size-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-black/20 transition-transform hover:scale-105 active:scale-95 lg:bottom-6 lg:right-6"
     >
       <WhatsappIcon className="size-7" />
