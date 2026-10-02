@@ -286,4 +286,16 @@ export const adminOrderMutationSchema = z
         path: ["roomNumber"],
       });
     }
+
+    // Mesma regra da constraint orders_in_person_only_at_motel.
+    if (
+      value.deliveryMethod === "HOME_DELIVERY" &&
+      isInPersonPayment(value.paymentMethod)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Entrega a domicílio aceita apenas Pix",
+        path: ["paymentMethod"],
+      });
+    }
   });

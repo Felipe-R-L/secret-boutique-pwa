@@ -179,7 +179,7 @@ export function AnalyticsDashboard({ report }: { report: AnalyticsReport }) {
               {
                 label: "Visitas",
                 value: kpis.sessions.toLocaleString("pt-BR"),
-                detail: "dias distintos por visitante",
+                detail: "sessões (encerram após 30 min parado)",
               },
               {
                 label: "Pedidos",

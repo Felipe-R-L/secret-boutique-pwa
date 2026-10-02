@@ -31,6 +31,7 @@ export type StageIndex = 0 | 1 | 2 | 3 | 4 | 5;
 
 type EventRow = {
   visitor_id: string;
+  session_id: string;
   event: string;
   source: string | null;
   product_id: string | null;
@@ -230,7 +231,7 @@ export async function buildAnalyticsReport(
       };
       visitors.set(row.visitor_id, agg);
     }
-    sessions.add(`${row.visitor_id}:${day}`);
+    sessions.add(row.session_id);
 
     const stage = stageOf(row);
     const cell = (agg.days[day] ??= { stage: 0, events: 0 });

@@ -208,13 +208,25 @@ export async function updateOrderStatus(input: unknown) {
     updatePayload.completed_at = new Date().toISOString();
   }
 
-  const { error } = await supabase
+  // Só grava se o status ainda for o que foi lido: impede, por exemplo, que
+  // um "Cancelar" sobrescreva um "Recebi no cartão" que entrou no meio.
+  const { data: updatedRows, error } = await supabase
     .from("orders")
     .update(updatePayload)
-    .eq("id", parsed.data.id);
+    .eq("id", parsed.data.id)
+    .eq("status", currentOrder.status)
+    .select("id");
 
   if (error) {
     return { ok: false as const, error: error.message };
+  }
+
+  if ((updatedRows?.length ?? 0) === 0) {
+    return {
+      ok: false as const,
+      error:
+        "O pedido mudou enquanto você estava na tela. Atualize e tente de novo.",
+    };
   }
 
   await logAudit(
@@ -277,17 +289,23 @@ export async function completeOrderByPickupCode(pickupCode: string) {
   }
 
   const now = new Date().toISOString();
-  const { error: updateError } = await supabase
+  const { data: completedRows, error: updateError } = await supabase
     .from("orders")
     .update({
       status: "COMPLETED",
       completed_at: now,
       updated_at: now,
     })
-    .eq("id", order.id);
+    .eq("id", order.id)
+    .eq("status", "READY_FOR_PICKUP")
+    .select("id");
 
   if (updateError) {
     return { ok: false as const, error: updateError.message };
+  }
+
+  if ((completedRows?.length ?? 0) === 0) {
+    return { ok: false as const, error: "Este pedido já foi finalizado." };
   }
 
   await logAudit(

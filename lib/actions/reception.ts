@@ -261,6 +261,33 @@ export async function createReceptionOrder(
     return { ok: false, error: itemsError.message };
   }
 
+  // Venda já recebida no balcão: se o acerto falhar, o pedido não pode
+  // ficar para trás como "a cobrar" — o caixa tentaria de novo e criaria uma
+  // duplicata de um dinheiro já recebido. Desfaz o pedido (itens em cascata).
+  if (parsed.data.settleNow) {
+    const settled = await settleInPersonOrder(
+      orderData.id,
+      parsed.data.paymentMethod as InPersonMethod,
+      true,
+      context,
+    );
+    if (!settled.ok) {
+      const { error: rollbackError } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", orderData.id)
+        .eq("status", "PENDING");
+      if (rollbackError) {
+        console.error("Falha ao desfazer venda de balcão:", rollbackError);
+        return {
+          ok: false,
+          error: `${settled.error} O pedido ${orderData.id.slice(0, 8)} ficou pendente em Pedidos — finalize por lá em vez de lançar de novo.`,
+        };
+      }
+      return { ok: false, error: `${settled.error} Nada foi registrado.` };
+    }
+  }
+
   await logAudit(
     {
       action: "order.create",
@@ -280,15 +307,6 @@ export async function createReceptionOrder(
   );
 
   if (parsed.data.settleNow) {
-    const settled = await settleInPersonOrder(
-      orderData.id,
-      parsed.data.paymentMethod as InPersonMethod,
-      true,
-      context,
-    );
-    if (!settled.ok) {
-      return { ok: false, error: settled.error };
-    }
     return {
       ok: true,
       orderId: orderData.id,
