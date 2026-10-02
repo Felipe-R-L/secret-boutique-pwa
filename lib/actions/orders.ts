@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminContext } from "@/lib/auth/admin";
 import { logAudit } from "@/lib/audit/log";
-import { adminOrderMutationSchema, orderStatusSchema } from "@/lib/schemas";
+import {
+  adminOrderMutationSchema,
+  isInPersonPayment,
+  orderStatusSchema,
+} from "@/lib/schemas";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   sendReadyForPickupEmail,
@@ -29,7 +33,7 @@ function normalizeOrderPayload(
 ) {
   return {
     customer_name: input.customerName,
-    customer_email: input.customerEmail,
+    customer_email: input.customerEmail ?? null,
     delivery_method: input.deliveryMethod,
     room_number:
       input.deliveryMethod === "ROOM_DELIVERY"
@@ -37,7 +41,7 @@ function normalizeOrderPayload(
         : null,
     payment_method: input.paymentMethod,
     status: input.status,
-    total_amount: Number(input.totalAmount.toFixed(2)),
+    total_cents: input.totalCents,
     updated_at: new Date().toISOString(),
   };
 }
@@ -70,7 +74,7 @@ export async function createOrderByAdmin(input: unknown) {
       targetType: "order",
       targetLabel: parsed.data.customerName,
       metadata: {
-        total: Number(parsed.data.totalAmount.toFixed(2)),
+        totalCents: parsed.data.totalCents,
         deliveryMethod: parsed.data.deliveryMethod,
         status: parsed.data.status,
       },
@@ -117,7 +121,7 @@ export async function updateOrderByAdmin(input: unknown) {
       targetId: parsed.data.id,
       targetLabel: parsed.data.customerName,
       metadata: {
-        total: Number(parsed.data.totalAmount.toFixed(2)),
+        totalCents: parsed.data.totalCents,
         status: parsed.data.status,
       },
     },
@@ -144,7 +148,7 @@ export async function updateOrderStatus(input: unknown) {
   // Fetch current order to validate transition
   const { data: currentOrder } = await supabase
     .from("orders")
-    .select("id,status,delivery_method")
+    .select("id,status,delivery_method,payment_method")
     .eq("id", parsed.data.id)
     .maybeSingle();
 
@@ -154,10 +158,20 @@ export async function updateOrderStatus(input: unknown) {
 
   const newStatus = parsed.data.status;
 
-  // Cancelar pedido é exclusivo do ADMIN (papel "master"). STAFF nunca cancela,
-  // independentemente do status de origem — guard explícito, além de o cancelamento
-  // não constar na tabela de transições permitidas do STAFF abaixo.
-  if (newStatus === "CANCELLED" && context.role !== "ADMIN") {
+  // Pedido "pagar na entrega" ainda não pago: nenhum dinheiro entrou nem saiu
+  // estoque, então a recepção pode cancelar (hóspede desistiu, quarto vazio).
+  const isUnpaidInPerson =
+    currentOrder.status === "PENDING" &&
+    isInPersonPayment(currentOrder.payment_method);
+
+  // Fora esse caso, cancelar pedido é exclusivo do ADMIN (papel "master") —
+  // guard explícito, além de o cancelamento não constar na tabela de
+  // transições permitidas do STAFF abaixo.
+  if (
+    newStatus === "CANCELLED" &&
+    context.role !== "ADMIN" &&
+    !isUnpaidInPerson
+  ) {
     return {
       ok: false as const,
       error: "Apenas o administrador pode cancelar pedidos.",
@@ -167,6 +181,7 @@ export async function updateOrderStatus(input: unknown) {
   // Staff can only do specific transitions
   if (context.role === "STAFF") {
     const validTransitions: Record<string, string[]> = {
+      ...(isUnpaidInPerson ? { PENDING: ["CANCELLED"] } : {}),
       PAID: ["PREPARING"],
       PREPARING: ["READY_FOR_PICKUP"],
       // Entrega no quarto dispensa o código de retirada: o funcionário
@@ -193,13 +208,25 @@ export async function updateOrderStatus(input: unknown) {
     updatePayload.completed_at = new Date().toISOString();
   }
 
-  const { error } = await supabase
+  // Só grava se o status ainda for o que foi lido: impede, por exemplo, que
+  // um "Cancelar" sobrescreva um "Recebi no cartão" que entrou no meio.
+  const { data: updatedRows, error } = await supabase
     .from("orders")
     .update(updatePayload)
-    .eq("id", parsed.data.id);
+    .eq("id", parsed.data.id)
+    .eq("status", currentOrder.status)
+    .select("id");
 
   if (error) {
     return { ok: false as const, error: error.message };
+  }
+
+  if ((updatedRows?.length ?? 0) === 0) {
+    return {
+      ok: false as const,
+      error:
+        "O pedido mudou enquanto você estava na tela. Atualize e tente de novo.",
+    };
   }
 
   await logAudit(
@@ -262,17 +289,23 @@ export async function completeOrderByPickupCode(pickupCode: string) {
   }
 
   const now = new Date().toISOString();
-  const { error: updateError } = await supabase
+  const { data: completedRows, error: updateError } = await supabase
     .from("orders")
     .update({
       status: "COMPLETED",
       completed_at: now,
       updated_at: now,
     })
-    .eq("id", order.id);
+    .eq("id", order.id)
+    .eq("status", "READY_FOR_PICKUP")
+    .select("id");
 
   if (updateError) {
     return { ok: false as const, error: updateError.message };
+  }
+
+  if ((completedRows?.length ?? 0) === 0) {
+    return { ok: false as const, error: "Este pedido já foi finalizado." };
   }
 
   await logAudit(
@@ -342,7 +375,7 @@ export type OrderItemView = {
   imageUrl: string | null;
   variantLabel: string | null;
   quantity: number;
-  unitPrice: number;
+  unitPriceCents: number;
 };
 
 /**
@@ -365,7 +398,7 @@ export async function getOrderItems(input: unknown): Promise<
   const { data, error } = await supabase
     .from("order_items")
     .select(
-      "id,product_id,variant_label,quantity,unit_price,products(name,image,image_url,images)",
+      "id,product_id,variant_label,quantity,unit_price_cents,products(name,image,image_url,images)",
     )
     .eq("order_id", parsed.data.orderId)
     .order("id", { ascending: true });
@@ -397,7 +430,7 @@ export async function getOrderItems(input: unknown): Promise<
       imageUrl: product?.image_url ?? product?.image ?? firstImage ?? null,
       variantLabel: row.variant_label,
       quantity: row.quantity,
-      unitPrice: Number(row.unit_price),
+      unitPriceCents: row.unit_price_cents,
     };
   });
 

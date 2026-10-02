@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCents } from '@/lib/money';
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import {
@@ -9,11 +10,24 @@ import {
   ArrowRight,
   Package,
   RefreshCw,
+  CreditCard,
+  Banknote,
+  BedDouble,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSearchParams } from 'next/navigation';
 import { useOrderHistoryStore } from '@/lib/store/order-history-store';
 import { track } from '@vercel/analytics';
+import { describeInPersonPayment } from '@/lib/payment-labels';
+
+type OrderSummary = {
+  status: string;
+  totalCents: number;
+  paymentMethod: string;
+  deliveryMethod: string;
+  roomNumber: string | null;
+  cashChangeForCents: number | null;
+};
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
@@ -21,6 +35,7 @@ function CheckoutSuccessContent() {
   const [pickupCode, setPickupCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
+  const [summary, setSummary] = useState<OrderSummary | null>(null);
   const addOrder = useOrderHistoryStore(s => s.addOrder);
 
   const fetchOrder = useCallback(async () => {
@@ -38,6 +53,14 @@ function CheckoutSuccessContent() {
 
       if (json?.ok) {
         setPickupCode(json.data.pickupCode);
+        setSummary({
+          status: json.data.status,
+          totalCents: Number(json.data.totalCents ?? 0),
+          paymentMethod: json.data.paymentMethod ?? 'PIX',
+          deliveryMethod: json.data.deliveryMethod ?? 'MOTEL_PICKUP',
+          roomNumber: json.data.roomNumber ?? null,
+          cashChangeForCents: json.data.cashChangeForCents ?? null,
+        });
 
         // Evento de funil — uma vez por pedido (revisitas não contam de novo)
         const trackedKey = `purchase_tracked_${orderId}`;
@@ -51,9 +74,12 @@ function CheckoutSuccessContent() {
           orderId,
           pickupCode: json.data.pickupCode,
           email: '',
-          total: Number(json.data.totalAmount ?? 0),
+          totalCents: Number(json.data.totalCents ?? 0),
           date: json.data.createdAt ?? new Date().toISOString(),
           status: json.data.status,
+          paymentMethod: json.data.paymentMethod,
+          deliveryMethod: json.data.deliveryMethod,
+          roomNumber: json.data.roomNumber ?? null,
         });
       } else {
         setFetchError(true);
@@ -67,6 +93,31 @@ function CheckoutSuccessContent() {
   useEffect(() => {
     fetchOrder();
   }, [fetchOrder]);
+
+  const inPerson =
+    summary?.paymentMethod === 'CARD' || summary?.paymentMethod === 'CASH';
+  const awaitingDelivery = inPerson && summary?.status === 'PENDING';
+
+  // Pedido pago na entrega: acompanha até a recepção confirmar.
+  useEffect(() => {
+    if (!awaitingDelivery) return;
+    const interval = setInterval(fetchOrder, 15000);
+    return () => clearInterval(interval);
+  }, [awaitingDelivery, fetchOrder]);
+
+  if (loading && !summary) {
+    return <CheckoutSuccessSkeleton />;
+  }
+
+  if (inPerson && summary) {
+    return (
+      <InPersonOrderReceived
+        summary={summary}
+        pickupCode={pickupCode}
+        orderId={orderId}
+      />
+    );
+  }
 
   return (
     <div className='relative flex flex-col items-center gap-6'>
@@ -174,6 +225,114 @@ function CheckoutSuccessContent() {
         </Button>
         <Button variant='ghost' className='h-10 rounded-full text-sm' asChild>
           <Link href='/como-funciona'>Como Funciona a Retirada</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Pagamento na entrega: o pedido já está com a recepção, falta só pagar
+// quando receber. Não há código de retirada para entrega no quarto.
+function InPersonOrderReceived({
+  summary,
+  pickupCode,
+  orderId,
+}: {
+  summary: OrderSummary;
+  pickupCode: string | null;
+  orderId: string | null;
+}) {
+  const isRoom = summary.deliveryMethod === 'ROOM_DELIVERY';
+  const delivered = summary.status === 'COMPLETED';
+  const cancelled = summary.status === 'CANCELLED';
+  const PaymentIcon = summary.paymentMethod === 'CARD' ? CreditCard : Banknote;
+
+  return (
+    <div className='relative flex flex-col items-center gap-6'>
+      <div className='rounded-full bg-pastel-sage/30 p-5'>
+        {isRoom ? (
+          <BedDouble className='size-10 text-primary' />
+        ) : (
+          <CheckCircle className='size-10 text-primary' />
+        )}
+      </div>
+
+      <div className='space-y-2'>
+        <h1 className='font-sans text-2xl font-semibold text-foreground md:text-3xl'>
+          {delivered
+            ? 'Pedido entregue!'
+            : cancelled
+              ? 'Pedido cancelado'
+              : 'Pedido recebido!'}
+        </h1>
+        <p
+          className='text-sm text-muted-foreground'
+          style={{ fontFamily: 'Inter, sans-serif' }}
+        >
+          {cancelled
+            ? 'Fale com a recepção se tiver alguma dúvida.'
+            : delivered
+              ? 'Obrigado pela compra! Aproveite.'
+              : isRoom
+                ? `A recepção já foi avisada e vai levar seu pedido ao quarto ${summary.roomNumber ?? ''}, em embalagem discreta.`
+                : 'A recepção já foi avisada. Seu pedido estará esperando por você na portaria.'}
+        </p>
+      </div>
+
+      {!delivered && !cancelled && (
+        <div className='w-full space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-6'>
+          <div className='flex items-center justify-center gap-2 text-sm font-medium text-primary'>
+            <PaymentIcon className='size-4' />
+            <span>{isRoom ? 'Pague na entrega' : 'Pague na retirada'}</span>
+          </div>
+          <p className='text-3xl font-bold text-foreground'>
+            {formatCents(summary.totalCents)}
+          </p>
+          <p
+            className='text-xs text-muted-foreground'
+            style={{ fontFamily: 'Inter, sans-serif' }}
+          >
+            {describeInPersonPayment(
+              summary.paymentMethod,
+              summary.cashChangeForCents,
+            )}
+          </p>
+        </div>
+      )}
+
+      {!isRoom && pickupCode && !delivered && !cancelled && (
+        <div className='w-full space-y-2 rounded-2xl border border-border bg-card p-4'>
+          <div className='flex items-center justify-center gap-2 text-sm font-medium text-primary'>
+            <KeyRound className='size-4' />
+            <span>Código de retirada</span>
+          </div>
+          <p className='font-mono text-3xl font-bold tracking-[0.3em] text-foreground'>
+            {pickupCode}
+          </p>
+        </div>
+      )}
+
+      {orderId && (
+        <p
+          className='text-xs text-muted-foreground'
+          style={{ fontFamily: 'Inter, sans-serif' }}
+        >
+          Pedido #{orderId.slice(0, 8)}
+        </p>
+      )}
+
+      <div className='flex w-full flex-col gap-3 pt-2'>
+        <Button className='h-12 rounded-full' asChild>
+          <Link href='/pedidos'>
+            <Package className='mr-2 size-4' />
+            Meus Pedidos
+          </Link>
+        </Button>
+        <Button variant='outline' className='h-12 rounded-full' asChild>
+          <Link href='/'>
+            Voltar ao Catálogo
+            <ArrowRight className='ml-2 size-4' />
+          </Link>
         </Button>
       </div>
     </div>

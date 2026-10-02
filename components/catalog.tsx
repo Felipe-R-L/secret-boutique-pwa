@@ -1,5 +1,6 @@
 "use client";
 
+import { trackEvent } from "@/lib/analytics/client";
 import { useState, useMemo, useEffect } from "react";
 import { ProductCard } from "@/components/product-card";
 import { FilterPills } from "@/components/filter-pills";
@@ -107,6 +108,10 @@ export function Catalog({
   }, [visibleProducts, selectedProduct]);
 
   const handleProductSelect = (product: Product) => {
+    trackEvent("product_view", {
+      productId: product.id,
+      valueCents: product.price_cents,
+    });
     setSelectedProduct(product);
     if (isDesktop) {
       setModalOpen(true);
@@ -116,6 +121,10 @@ export function Catalog({
   };
 
   const handleRelatedProductSelect = (product: Product) => {
+    trackEvent("product_view", {
+      productId: product.id,
+      valueCents: product.price_cents,
+    });
     setSelectedProduct(product);
   };
 
@@ -134,7 +143,7 @@ export function Catalog({
       <BenefitsStrip />
 
       {/* Decorative wave divider */}
-      <div className="relative h-16 overflow-hidden md:h-24">
+      <div className="relative h-10 overflow-hidden md:h-14">
         <svg className="absolute bottom-0 w-full" viewBox="0 0 1440 80" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
           <path d="M0 40C240 10 480 70 720 40C960 10 1200 70 1440 40V80H0V40Z" fill="var(--pastel-rose)" fillOpacity="0.15" />
           <path d="M0 50C200 20 400 70 600 45C800 20 1000 70 1200 45C1400 20 1440 50 1440 50V80H0V50Z" fill="var(--pastel-lavender)" fillOpacity="0.12" />
@@ -144,7 +153,7 @@ export function Catalog({
       {/* Catalog Section */}
       <section
         id="catalog"
-        className="relative px-4 py-12 md:px-8 md:py-16 lg:px-12 lg:py-20 xl:px-16"
+        className="relative scroll-mt-20 pb-12 pt-6 md:pb-16 md:pt-8"
       >
         {/* Decorative side elements */}
         <div className="pointer-events-none absolute left-0 top-20 hidden xl:block">
@@ -163,8 +172,10 @@ export function Catalog({
         {/* Subtle background gradient */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent via-pastel-lavender/5 to-transparent" />
 
-        <div className="mx-auto max-w-[1600px]">
-          <div className="mb-8 space-y-4 md:mb-12">
+        {/* Mesmo container do cabeçalho, hero e faixa de benefícios: as
+            margens laterais se alinham em toda a página. */}
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="mb-6 space-y-4 md:mb-8">
             <div className="flex flex-col items-start gap-4 md:flex-row md:items-end md:justify-between">
               <div className="space-y-2">
                 <h2 className="font-sans text-2xl font-semibold tracking-tight text-foreground md:text-3xl lg:text-4xl">
@@ -213,7 +224,7 @@ export function Catalog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 xl:gap-6 2xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3 lg:grid-cols-4 xl:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminContext } from "@/lib/auth/admin";
 import { logAudit } from "@/lib/audit/log";
+import { parseBrlToCents } from "@/lib/money";
 import { productMutationSchema } from "@/lib/schemas";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -49,7 +50,7 @@ export async function upsertProduct(
     id: variant.id?.trim() || crypto.randomUUID(),
     sku: variant.sku.trim(),
     label: variant.label.trim(),
-    price: Number(variant.price),
+    price_cents: variant.priceCents,
     stock_quantity: variant.stockQuantity,
     in_stock: variant.inStock && variant.stockQuantity > 0,
     images: toUniqueStrings(variant.images),
@@ -65,9 +66,9 @@ export async function upsertProduct(
     ...(parsed.data.imageUrls ?? []),
     ...normalizedVariants.flatMap((variant) => variant.images),
   ]);
-  const aggregatePrice = hasVariants
-    ? Math.min(...normalizedVariants.map((variant) => variant.price))
-    : parsed.data.price;
+  const aggregatePriceCents = hasVariants
+    ? Math.min(...normalizedVariants.map((variant) => variant.price_cents))
+    : parsed.data.priceCents;
   const aggregateStockQuantity = hasVariants
     ? normalizedVariants.reduce(
         (total, variant) => total + variant.stock_quantity,
@@ -82,7 +83,7 @@ export async function upsertProduct(
 
   const productPayload = {
     name: parsed.data.name,
-    price: aggregatePrice,
+    price_cents: aggregatePriceCents,
     description: parsed.data.description,
     curatorship: parsed.data.curatorship?.trim() || null,
     category: parsed.data.category,
@@ -125,7 +126,7 @@ export async function upsertProduct(
         targetLabel: parsed.data.name,
         metadata: {
           category: parsed.data.category,
-          price: aggregatePrice,
+          priceCents: aggregatePriceCents,
           variants: normalizedVariants.length,
         },
       },
@@ -234,6 +235,11 @@ function importField(row: Record<string, string>, key: string): string {
 }
 
 // Parses pt-BR or en numbers: "1.234,56", "45,90", "45.90", "R$ 12".
+/** Valor em reais da planilha ("R$ 29,90", "29.90") → centavos, ou NaN. */
+function parseMoneyCents(raw: string): number {
+  return parseBrlToCents(raw) ?? NaN;
+}
+
 function parseLocaleNumber(raw: string): number {
   let s = raw.replace(/r\$/i, "").replace(/\s/g, "").trim();
   if (!s) return NaN;
@@ -370,7 +376,7 @@ export async function importProducts(
           sku: importField(r, "sku") || `${slugify(name)}-${idx + 1}`,
           label:
             importField(r, "variant") || attrValue || `Variação ${idx + 1}`,
-          price: parseLocaleNumber(importField(r, "salePrice")),
+          priceCents: parseMoneyCents(importField(r, "salePrice")),
           stockQuantity: qty,
           inStock: qty > 0,
           isDefault: idx === 0,
@@ -381,15 +387,15 @@ export async function importProducts(
       });
 
       const positivePrices = variants
-        .map((v) => v.price)
+        .map((v) => v.priceCents)
         .filter((p) => Number.isFinite(p) && p > 0);
-      const minPrice =
+      const minPriceCents =
         positivePrices.length > 0 ? Math.min(...positivePrices) : NaN;
 
       const result = await upsertProduct({
         ...(productId ? { productId } : {}),
         name,
-        price: minPrice,
+        priceCents: minPriceCents,
         description,
         category,
         isFeatured,
@@ -421,8 +427,8 @@ export async function importProducts(
     }
 
     // ----- Simple product: merge duplicate rows (sum quantity) -----
-    const salePrice = parseLocaleNumber(importField(first, "salePrice"));
-    const unitCost = parseLocaleNumber(importField(first, "cost"));
+    const salePriceCents = parseMoneyCents(importField(first, "salePrice"));
+    const unitCostCents = parseMoneyCents(importField(first, "cost"));
     const totalQty = items.reduce((sum, item) => {
       const q = Math.trunc(
         parseLocaleNumber(importField(item.record, "quantity")),
@@ -437,7 +443,7 @@ export async function importProducts(
       const result = await upsertProduct({
         productId,
         name,
-        price: salePrice,
+        priceCents: salePriceCents,
         description,
         category,
         isFeatured,
@@ -466,7 +472,7 @@ export async function importProducts(
 
     const candidate = {
       name,
-      price: salePrice,
+      priceCents: salePriceCents,
       description,
       category,
       isFeatured,
@@ -499,7 +505,7 @@ export async function importProducts(
 
     const productPayload = {
       name: parsed.data.name,
-      price: parsed.data.price,
+      price_cents: parsed.data.priceCents,
       description: parsed.data.description,
       curatorship: parsed.data.curatorship?.trim() || null,
       category: parsed.data.category,
@@ -533,16 +539,16 @@ export async function importProducts(
 
     // Initial stock entry (ENTRY) → sets stock_quantity + feeds cost dashboard.
     if (totalQty > 0) {
-      if (Number.isFinite(unitCost) && unitCost > 0) {
-        const invoiceTotal = Number((unitCost * totalQty).toFixed(2));
+      if (Number.isFinite(unitCostCents) && unitCostCents > 0) {
+        const invoiceTotalCents = unitCostCents * totalQty;
         const { error: stockError } = await supabase
           .from("inventory_movements")
           .insert({
             product_id: created.id,
             type: "ENTRY" as const,
             quantity: totalQty,
-            invoice_total: invoiceTotal,
-            unit_cost: Number(unitCost.toFixed(2)),
+            invoice_total_cents: invoiceTotalCents,
+            unit_cost_cents: unitCostCents,
             notes: "Entrada inicial (importação CSV)",
           });
 

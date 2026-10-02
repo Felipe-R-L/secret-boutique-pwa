@@ -37,11 +37,14 @@ export function getDefaultProductVariant(
   );
 }
 
-export function getEffectiveProductPrice(
+/** Preço da variação escolhida (ou do produto), em centavos. */
+export function getEffectiveProductPriceCents(
   product: Product,
   variantId?: string | null,
 ): number {
-  return getProductVariant(product, variantId)?.price ?? product.price;
+  return (
+    getProductVariant(product, variantId)?.price_cents ?? product.price_cents
+  );
 }
 
 export function isVariantAvailable(variant: ProductVariant): boolean {
@@ -65,17 +68,18 @@ export function isProductAvailable(
   return product.inStock ?? product.in_stock ?? true;
 }
 
-export function getProductPriceRange(product: Product): {
+/** Menor e maior preço entre as variações, em centavos. */
+export function getProductPriceRangeCents(product: Product): {
   min: number;
   max: number;
 } {
   const variants = getProductVariants(product);
 
   if (variants.length === 0) {
-    return { min: product.price, max: product.price };
+    return { min: product.price_cents, max: product.price_cents };
   }
 
-  const prices = variants.map((variant) => variant.price);
+  const prices = variants.map((variant) => variant.price_cents);
 
   return {
     min: Math.min(...prices),

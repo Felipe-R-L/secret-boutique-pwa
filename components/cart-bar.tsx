@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -8,17 +9,10 @@ import { useCartStore } from "@/lib/store/cart-store";
 
 const HIDDEN_PREFIXES = ["/cart", "/checkout", "/admin", "/auth"];
 
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
-
 export function CartBar() {
   const pathname = usePathname();
   const itemCount = useCartStore((state) => state.getItemCount());
-  const total = useCartStore((state) => state.getTotal());
+  const totalCents = useCartStore((state) => state.getTotalCents());
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -31,23 +25,28 @@ export function CartBar() {
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
-      <Link
-        href="/cart"
-        className="flex h-14 items-center justify-between rounded-full bg-primary px-5 text-primary-foreground shadow-2xl shadow-primary/30 transition-transform active:scale-[0.98] animate-in slide-in-from-bottom-4 duration-300"
-      >
-        <span
-          className="flex items-center gap-2 text-sm font-semibold"
-          style={{ fontFamily: "Inter, sans-serif" }}
+    <>
+      {/* Reserva o espaço da barra no fim da página para ela não cobrir o
+          rodapé quando a pessoa rola até o final. */}
+      <div aria-hidden className="h-24 lg:hidden" />
+      <div className="fixed inset-x-0 bottom-0 z-40 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
+        <Link
+          href="/cart"
+          className="flex h-14 items-center justify-between rounded-full bg-primary px-5 text-primary-foreground shadow-2xl shadow-primary/30 transition-transform active:scale-[0.98] animate-in slide-in-from-bottom-4 duration-300"
         >
-          <ShoppingBag className="size-4" />
-          Ver carrinho · {itemCount} {itemCount === 1 ? "item" : "itens"}
-        </span>
-        <span className="flex items-center gap-2 font-sans text-base font-bold">
-          {formatBRL(total)}
-          <ArrowRight className="size-4" />
-        </span>
-      </Link>
-    </div>
+          <span
+            className="flex items-center gap-2 text-sm font-semibold"
+            style={{ fontFamily: "Inter, sans-serif" }}
+          >
+            <ShoppingBag className="size-4" />
+            Ver carrinho · {itemCount} {itemCount === 1 ? "item" : "itens"}
+          </span>
+          <span className="flex items-center gap-2 font-sans text-base font-bold">
+            {formatCents(totalCents)}
+            <ArrowRight className="size-4" />
+          </span>
+        </Link>
+      </div>
+    </>
   );
 }

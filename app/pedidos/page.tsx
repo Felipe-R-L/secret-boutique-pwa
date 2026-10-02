@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCents } from '@/lib/money';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
@@ -76,9 +77,12 @@ export default function MeusPedidosPage() {
           if (json.ok && json.data?.status) {
             mergeOrder(orderId, {
               status: json.data.status,
-              total: Number(json.data.totalAmount ?? 0),
+              totalCents: Number(json.data.totalCents ?? 0),
               pickupCode: json.data.pickupCode ?? null,
               date: json.data.createdAt ?? new Date().toISOString(),
+              paymentMethod: json.data.paymentMethod,
+              deliveryMethod: json.data.deliveryMethod,
+              roomNumber: json.data.roomNumber ?? null,
             });
           }
         }
@@ -106,12 +110,6 @@ export default function MeusPedidosPage() {
       }
     });
   }, [mounted]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(price);
 
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('pt-BR', {
@@ -168,8 +166,20 @@ export default function MeusPedidosPage() {
             </p>
 
             {orders.map(order => {
-              const status =
-                statusLabels[order.status ?? 'PENDING'] ?? statusLabels.PENDING;
+              const inPersonPending =
+                (order.status ?? 'PENDING') === 'PENDING' &&
+                (order.paymentMethod === 'CARD' ||
+                  order.paymentMethod === 'CASH');
+              const status = inPersonPending
+                ? {
+                    label:
+                      order.deliveryMethod === 'ROOM_DELIVERY'
+                        ? 'Pagar na entrega'
+                        : 'Pagar na retirada',
+                    color: 'bg-yellow-100 text-yellow-800',
+                  }
+                : (statusLabels[order.status ?? 'PENDING'] ??
+                  statusLabels.PENDING);
               const isRefreshing = refreshing.has(order.orderId);
 
               return (
@@ -193,19 +203,25 @@ export default function MeusPedidosPage() {
                     </span>
                   </div>
 
-                  {order.pickupCode && (
-                    <div className='rounded-xl bg-pastel-peach/15 p-3 text-center'>
-                      <p className='text-xs text-muted-foreground'>
-                        Código de retirada
-                      </p>
-                      <p className='font-mono text-xl font-bold tracking-widest text-foreground'>
-                        {order.pickupCode}
-                      </p>
-                    </div>
-                  )}
+                  {/* Entrega no quarto paga na entrega dispensa código. */}
+                  {order.pickupCode &&
+                    !(
+                      order.deliveryMethod === 'ROOM_DELIVERY' &&
+                      (order.paymentMethod === 'CARD' ||
+                        order.paymentMethod === 'CASH')
+                    ) && (
+                      <div className='rounded-xl bg-pastel-peach/15 p-3 text-center'>
+                        <p className='text-xs text-muted-foreground'>
+                          Código de retirada
+                        </p>
+                        <p className='font-mono text-xl font-bold tracking-widest text-foreground'>
+                          {order.pickupCode}
+                        </p>
+                      </div>
+                    )}
 
                   <div className='flex items-center justify-between'>
-                    <p className='font-medium'>{formatPrice(order.total)}</p>
+                    <p className='font-medium'>{formatCents(order.totalCents)}</p>
                     <Button
                       variant='ghost'
                       size='sm'

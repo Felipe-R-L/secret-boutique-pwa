@@ -10,7 +10,7 @@ export default async function AdminReceptionPage() {
 
   const { data: products } = await supabase
     .from("products")
-    .select("id,name,price,stock_quantity,in_stock,image,image_url,images,variants")
+    .select("id,name,price_cents,stock_quantity,in_stock,image,image_url,images,variants")
     .order("name", { ascending: true });
 
   const productOptions = (products ?? []).map((p) => {
@@ -21,14 +21,14 @@ export default async function AdminReceptionPage() {
     return {
       id: p.id,
       name: p.name,
-      price: Number(p.price),
+      price_cents: p.price_cents,
       stock_quantity: p.stock_quantity ?? 0,
       in_stock: p.in_stock !== false,
       imageUrl: p.image_url ?? p.image ?? firstImage ?? null,
       variants: parsePersistedProductVariants(p.variants).map((variant) => ({
         id: variant.id,
         label: variant.label,
-        price: variant.price,
+        price_cents: variant.price_cents,
         stock_quantity: variant.stock_quantity,
         in_stock: variant.in_stock,
       })),
@@ -40,9 +40,10 @@ export default async function AdminReceptionPage() {
       <div className="space-y-2">
         <h2 className="text-xl font-semibold">Venda pela Recepção</h2>
         <p className="text-sm text-muted-foreground">
-          Monte o pedido, gere o QR Pix (ou copia e cola) na tela e acompanhe o
-          pagamento em tempo real. Cartão/dinheiro pela maquininha: confirme
-          manualmente após receber.
+          Para vendas no balcão e hóspedes que pedem pelo telefone do quarto.
+          Cartão ou dinheiro no balcão fecham a venda na hora; para o quarto, o
+          pedido fica &quot;a cobrar na entrega&quot; em Pedidos. Pix gera o QR na tela e
+          confirma sozinho.
         </p>
       </div>
 

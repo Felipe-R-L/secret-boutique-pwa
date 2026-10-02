@@ -25,6 +25,51 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 type PushState = "unsupported" | "loading" | "denied" | "off" | "on";
 
+function sameKey(a: ArrayBuffer | null, b: Uint8Array): boolean {
+  if (!a) return false;
+  const bytes = new Uint8Array(a);
+  return bytes.length === b.length && bytes.every((byte, i) => byte === b[i]);
+}
+
+async function saveSubscription(sub: PushSubscription, resync: boolean) {
+  const json = sub.toJSON();
+  return savePushSubscription({
+    endpoint: sub.endpoint,
+    keys: {
+      p256dh: json.keys?.p256dh ?? "",
+      auth: json.keys?.auth ?? "",
+    },
+    userAgent: navigator.userAgent,
+    resync,
+  });
+}
+
+/**
+ * Mantém a inscrição deste aparelho válida no servidor. O servidor apaga
+ * inscrições que o serviço de push recusa (404/410) e a chave VAPID pode ter
+ * mudado; sem isso o botão mostrava "ativas" enquanto nenhum push chegava.
+ */
+async function resyncSubscription(
+  reg: ServiceWorkerRegistration,
+  sub: PushSubscription,
+): Promise<PushSubscription | null> {
+  if (!VAPID_PUBLIC_KEY) return sub;
+  const serverKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
+  let current: PushSubscription | null = sub;
+  if (!sameKey(sub.options.applicationServerKey, serverKey)) {
+    await sub.unsubscribe().catch(() => {});
+    // Safari pode exigir um toque para reinscrever; aí o botão volta a
+    // "Ativar notificações".
+    current = await reg.pushManager
+      .subscribe({ userVisibleOnly: true, applicationServerKey: serverKey })
+      .catch(() => null);
+  }
+
+  if (current) await saveSubscription(current, true);
+  return current;
+}
+
 export function PushNotifications() {
   const [state, setState] = useState<PushState>("loading");
 
@@ -46,8 +91,14 @@ export function PushNotifications() {
 
     try {
       const reg = await navigator.serviceWorker.getRegistration();
+      // Busca a versão mais nova do sw.js a cada abertura do painel.
+      reg?.update().catch(() => {});
       const sub = await reg?.pushManager.getSubscription();
-      setState(sub ? "on" : "off");
+      const synced =
+        reg && sub && Notification.permission === "granted"
+          ? await resyncSubscription(reg, sub)
+          : null;
+      setState(synced ? "on" : "off");
     } catch {
       setState("off");
     }
@@ -79,20 +130,22 @@ export function PushNotifications() {
       const reg = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
 
+      const serverKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      // Inscrição antiga com outra chave VAPID faz o subscribe falhar.
+      const previous = await reg.pushManager.getSubscription();
+      if (
+        previous &&
+        !sameKey(previous.options.applicationServerKey, serverKey)
+      ) {
+        await previous.unsubscribe();
+      }
+
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: serverKey,
       });
 
-      const json = sub.toJSON();
-      const result = await savePushSubscription({
-        endpoint: sub.endpoint,
-        keys: {
-          p256dh: json.keys?.p256dh ?? "",
-          auth: json.keys?.auth ?? "",
-        },
-        userAgent: navigator.userAgent,
-      });
+      const result = await saveSubscription(sub, false);
 
       if (!result.ok) {
         toast.error("Não foi possível ativar", { description: result.error });

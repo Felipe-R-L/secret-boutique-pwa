@@ -81,7 +81,7 @@ export default function OpengraphImage() {
             color: "#512640",
           }}
         >
-          Compra discreta · Pagamento via PIX · +18
+          Compra discreta · Pague na entrega · +18
         </div>
       </div>
     ),

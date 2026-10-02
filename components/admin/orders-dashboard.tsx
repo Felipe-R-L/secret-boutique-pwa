@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { formatCents } from "@/lib/money";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Package,
   Clock,
   CheckCircle,
   ArrowRight,
   Bell,
+  BellOff,
   Search,
   Trash2,
+  CreditCard,
+  Banknote,
+  HandCoins,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,17 +34,28 @@ import {
   completeOrderByPickupCode,
   deleteOrderByAdmin,
 } from "@/lib/actions/orders";
+import { confirmInPersonPayment } from "@/lib/actions/reception";
+import {
+  cashChangeDueCents,
+  describeInPersonPayment,
+  PAYMENT_METHOD_LABELS,
+} from "@/lib/payment-labels";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 import { OrderItemsButton } from "@/components/admin/order-items-modal";
-import { playNotificationSound } from "@/lib/sound";
+import {
+  isAudioUnlocked,
+  playNotificationSound,
+  primeAudio,
+} from "@/lib/sound";
+import { ADMIN_ORDER_COLUMNS, ADMIN_ORDER_LIMIT } from "@/lib/admin-orders";
 
 type Order = {
   id: string;
   customer_name: string;
-  customer_email: string;
+  customer_email: string | null;
   delivery_method: string;
   room_number: string | null;
-  delivery_fee?: number | null;
+  delivery_fee_cents?: number | null;
   delivery_cep?: string | null;
   delivery_street?: string | null;
   delivery_number?: string | null;
@@ -48,11 +64,51 @@ type Order = {
   delivery_city?: string | null;
   delivery_state?: string | null;
   status: OrderStatus;
-  total_amount: number;
+  payment_method?: string | null;
+  cash_change_for_cents?: number | null;
+  channel?: string | null;
+  total_cents: number;
   pickup_code: string | null;
   created_at: string;
   updated_at: string;
 };
+
+// Pedido "pagar na entrega" (cartão/dinheiro) que ainda não foi cobrado.
+function isAwaitingInPersonPayment(order: Order): boolean {
+  return (
+    order.status === "PENDING" &&
+    (order.payment_method === "CARD" || order.payment_method === "CASH")
+  );
+}
+
+/**
+ * Pedido que a equipe precisa atender agora: Pix que acabou de ser pago
+ * (o webhook passa de PENDING para PAID) ou "pagar na entrega" recém-criado
+ * pelo site. Pedido lançado pela própria recepção não toca.
+ */
+function needsAttention(order: Order, previous: Order | undefined): boolean {
+  if (previous) {
+    return previous.status !== "PAID" && order.status === "PAID";
+  }
+  return (
+    order.status === "PAID" ||
+    (isAwaitingInPersonPayment(order) && order.channel !== "RECEPTION")
+  );
+}
+
+function paymentSummary(order: Order): string {
+  const method = order.payment_method ?? "PIX";
+  if (method === "PIX") return PAYMENT_METHOD_LABELS.PIX;
+  const label = describeInPersonPayment(method, order.cash_change_for_cents);
+  const change = cashChangeDueCents(
+    order.cash_change_for_cents,
+    order.total_cents,
+  );
+  if (method === "CASH" && change && order.status === "PENDING") {
+    return `${label} (levar ${formatCents(change)} de troco)`;
+  }
+  return label;
+}
 
 function deliveryShortLabel(order: Order): string {
   if (order.delivery_method === "MOTEL_PICKUP") return "Portaria";
@@ -123,7 +179,11 @@ const statusConfig: Record<
 // cancelamento (status === "CANCELLED"); `delete` remove o pedido em definitivo.
 type ConfirmAction =
   | { kind: "status"; orderId: string; newStatus: OrderStatus }
-  | { kind: "delete"; orderId: string };
+  | { kind: "delete"; orderId: string }
+  | { kind: "settle"; orderId: string; method: "CARD" | "CASH" };
+
+// "A cobrar" não é um status do banco: são os PENDING com pagamento presencial.
+type OrderFilter = OrderStatus | "ALL" | "TO_COLLECT";
 
 interface OrdersDashboardProps {
   initialOrders: Order[];
@@ -140,19 +200,79 @@ export function OrdersDashboard({
   const [completionSuccess, setCompletionSuccess] = useState("");
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
   const [newOrderAlert, setNewOrderAlert] = useState(false);
-  const [filter, setFilter] = useState<OrderStatus | "ALL">("ALL");
+  const [filter, setFilter] = useState<OrderFilter>("ALL");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
-  // Alerta visual + som quando um novo pedido pago chega e o ADMIN/STAFF está
-  // com a página aberta. O push mobile é tratado separadamente no servidor.
-  const notifyNewOrder = useCallback(() => {
+  const [soundBlocked, setSoundBlocked] = useState(false);
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
+  const unseenRef = useRef(0);
+  const baseTitleRef = useRef("");
+
+  // Alerta visual + som quando chega pedido que pede ação. Com a aba em
+  // segundo plano, o título passa a contar os pedidos novos até ela voltar.
+  // O push (celular/desktop) é enviado separadamente pelo servidor.
+  const notifyNewOrders = useCallback((count: number) => {
+    if (count <= 0) return;
     setNewOrderAlert(true);
     playNotificationSound();
+    if (document.hidden) {
+      unseenRef.current += count;
+      document.title = `(${unseenRef.current}) Novo pedido • ${baseTitleRef.current}`;
+    }
+  }, []);
+
+  // O navegador só libera som depois de um clique/toque na página. Ao
+  // recarregar o painel o áudio volta bloqueado, então qualquer gesto serve.
+  useEffect(() => {
+    setSoundBlocked(!isAudioUnlocked());
+    const unlock = () => {
+      void primeAudio().then((ok) => {
+        setSoundBlocked(!ok);
+        if (ok) {
+          window.removeEventListener("pointerdown", unlock);
+          window.removeEventListener("keydown", unlock);
+        }
+      });
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, []);
 
   // Real-time subscription
   useEffect(() => {
+    baseTitleRef.current = document.title;
     const supabase = createClient();
+    let resyncTimer: ReturnType<typeof setTimeout> | null = null;
+    let disconnected = false;
+
+    // Recarrega a lista do banco. Cobre o que o realtime perdeu enquanto a
+    // aba estava em segundo plano ou a conexão caiu, e toca para o que chegou.
+    const resync = async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(ADMIN_ORDER_COLUMNS)
+        .order("created_at", { ascending: false })
+        .limit(ADMIN_ORDER_LIMIT);
+      if (error || !data) return;
+      const fresh = data as Order[];
+      const known = new Map(ordersRef.current.map((o) => [o.id, o]));
+      const missed = fresh.filter((o) =>
+        needsAttention(o, known.get(o.id)),
+      ).length;
+      setOrders(fresh);
+      notifyNewOrders(missed);
+    };
+
+    const scheduleResync = () => {
+      if (resyncTimer) clearTimeout(resyncTimer);
+      resyncTimer = setTimeout(() => void resync(), 500);
+    };
+
     const channel = supabase
       .channel("orders-realtime")
       .on(
@@ -165,38 +285,51 @@ export function OrdersDashboard({
         (payload) => {
           if (payload.eventType === "INSERT") {
             const newOrder = payload.new as Order;
-            setOrders((prev) => [newOrder, ...prev]);
-            if (newOrder.status === "PAID") {
-              notifyNewOrder();
-            }
+            setOrders((prev) => [
+              newOrder,
+              ...prev.filter((o) => o.id !== newOrder.id),
+            ]);
+            if (needsAttention(newOrder, undefined)) notifyNewOrders(1);
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as Order;
-            // O fluxo real do cliente cria o pedido como PENDING e o webhook do
-            // Mercado Pago o transiciona para PAID via UPDATE — por isso o som
-            // precisa disparar aqui, não só no INSERT.
-            setOrders((prev) => {
-              const previous = prev.find((o) => o.id === updated.id);
-              if (
-                previous &&
-                previous.status !== "PAID" &&
-                updated.status === "PAID"
-              ) {
-                notifyNewOrder();
-              }
-              return prev.map((o) => (o.id === updated.id ? updated : o));
-            });
+            const previous = ordersRef.current.find((o) => o.id === updated.id);
+            setOrders((prev) =>
+              prev.map((o) => (o.id === updated.id ? updated : o)),
+            );
+            if (previous && needsAttention(updated, previous)) {
+              notifyNewOrders(1);
+            }
           } else if (payload.eventType === "DELETE") {
             const deleted = payload.old as { id: string };
             setOrders((prev) => prev.filter((o) => o.id !== deleted.id));
           }
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          // Reconectou depois de uma queda: busca o que passou nesse meio.
+          if (disconnected) scheduleResync();
+          disconnected = false;
+        } else {
+          disconnected = true;
+        }
+      });
+
+    const onVisibility = () => {
+      if (document.hidden) return;
+      unseenRef.current = 0;
+      document.title = baseTitleRef.current;
+      scheduleResync();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
+      if (resyncTimer) clearTimeout(resyncTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.title = baseTitleRef.current;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [notifyNewOrders]);
 
   const setLoading = useCallback((id: string, loading: boolean) => {
     setLoadingActions((prev) => {
@@ -254,6 +387,41 @@ export function OrdersDashboard({
     }
   };
 
+  const handleSettle = async (orderId: string, method: "CARD" | "CASH") => {
+    setLoading(orderId, true);
+    const result = await confirmInPersonPayment({
+      orderId,
+      method,
+      complete: true,
+    });
+    if (!result.ok) {
+      toast.error("Não foi possível confirmar o pagamento", {
+        description: result.error,
+      });
+    } else {
+      // O realtime também atualiza; aqui só evita o atraso na tela.
+      const now = new Date().toISOString();
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: result.status,
+                payment_method: method,
+                updated_at: now,
+              }
+            : o,
+        ),
+      );
+      toast.success(
+        method === "CARD"
+          ? "Pago no cartão — pedido finalizado"
+          : "Pago em dinheiro — pedido finalizado",
+      );
+    }
+    setLoading(orderId, false);
+  };
+
   const handleDelete = async (orderId: string) => {
     setLoading(orderId, true);
     await deleteOrderByAdmin({ id: orderId });
@@ -267,6 +435,8 @@ export function OrdersDashboard({
     setConfirmAction(null);
     if (action.kind === "delete") {
       await handleDelete(action.orderId);
+    } else if (action.kind === "settle") {
+      await handleSettle(action.orderId, action.method);
     } else {
       await handleStatusUpdate(action.orderId, action.newStatus);
     }
@@ -279,11 +449,36 @@ export function OrdersDashboard({
     const order = orders.find((o) => o.id === confirmAction.orderId);
     const who = order?.customer_name ?? "o cliente";
 
+    if (confirmAction.kind === "settle") {
+      const total = order ? formatCents(order.total_cents) : "";
+      const how =
+        confirmAction.method === "CARD" ? "no cartão" : "em dinheiro";
+      return {
+        title: `Recebeu ${total} ${how}?`,
+        description: `O pedido de ${who} será marcado como pago ${how} e finalizado, e o estoque dos produtos será baixado.`,
+        confirmLabel: "Confirmar recebimento",
+        destructive: false,
+      };
+    }
+
     if (confirmAction.kind === "delete") {
       return {
         title: "Excluir pedido?",
         description: `O pedido de ${who} será removido permanentemente do sistema. Esta ação não pode ser desfeita e não estorna o pagamento — faça o reembolso no painel do Mercado Pago, se necessário.`,
         confirmLabel: "Excluir pedido",
+        destructive: true,
+      };
+    }
+
+    if (
+      confirmAction.newStatus === "CANCELLED" &&
+      order &&
+      isAwaitingInPersonPayment(order)
+    ) {
+      return {
+        title: "Cancelar pedido?",
+        description: `O pedido de ${who} ainda não foi pago nem saiu do estoque. Ele será marcado como Cancelado.`,
+        confirmLabel: "Cancelar pedido",
         destructive: true,
       };
     }
@@ -307,18 +502,18 @@ export function OrdersDashboard({
     };
   })();
 
+  const toCollectCount = orders.filter(isAwaitingInPersonPayment).length;
+
   const filteredOrders =
-    filter === "ALL" ? orders : orders.filter((o) => o.status === filter);
+    filter === "ALL"
+      ? orders
+      : filter === "TO_COLLECT"
+        ? orders.filter(isAwaitingInPersonPayment)
+        : orders.filter((o) => o.status === filter);
 
   const activeOrders = orders.filter(
     (o) => !["COMPLETED", "CANCELLED", "EXPIRED"].includes(o.status),
   );
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
 
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleString("pt-BR", {
@@ -331,7 +526,11 @@ export function OrdersDashboard({
   return (
     <div className="space-y-6">
       {/* Header stats */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+          <p className="text-2xl font-bold text-purple-800">{toCollectCount}</p>
+          <p className="text-xs text-purple-600">A cobrar</p>
+        </div>
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
           <p className="text-2xl font-bold text-blue-800">
             {orders.filter((o) => o.status === "PAID").length}
@@ -357,6 +556,18 @@ export function OrdersDashboard({
           <p className="text-xs text-gray-600">Finalizados</p>
         </div>
       </div>
+
+      {soundBlocked && (
+        <button
+          type="button"
+          onClick={() => void primeAudio().then((ok) => setSoundBlocked(!ok))}
+          className="flex w-full items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-left text-sm text-amber-900"
+        >
+          <BellOff className="size-4 shrink-0" />
+          Som de novos pedidos bloqueado pelo navegador. Toque aqui (ou em
+          qualquer lugar da página) para ativar.
+        </button>
+      )}
 
       {/* New order alert */}
       {newOrderAlert && (
@@ -413,6 +624,7 @@ export function OrdersDashboard({
         {(
           [
             "ALL",
+            "TO_COLLECT",
             "PAID",
             "PREPARING",
             "READY_FOR_PICKUP",
@@ -430,7 +642,9 @@ export function OrdersDashboard({
           >
             {s === "ALL"
               ? `Todos (${orders.length})`
-              : `${statusConfig[s].label} (${orders.filter((o) => o.status === s).length})`}
+              : s === "TO_COLLECT"
+                ? `A cobrar (${toCollectCount})`
+                : `${statusConfig[s].label} (${orders.filter((o) => o.status === s).length})`}
           </button>
         ))}
       </div>
@@ -446,10 +660,18 @@ export function OrdersDashboard({
           const isRoomDelivery =
             order.delivery_method === "ROOM_DELIVERY" ||
             order.delivery_method === "HOME_DELIVERY";
-          const statusLabel =
-            order.status === "READY_FOR_PICKUP" && isRoomDelivery
+          const awaitingInPerson = isAwaitingInPersonPayment(order);
+          const statusLabel = awaitingInPerson
+            ? order.delivery_method === "ROOM_DELIVERY"
+              ? "A cobrar na entrega"
+              : "A cobrar na retirada"
+            : order.status === "READY_FOR_PICKUP" && isRoomDelivery
               ? "Pronto p/ Entrega"
               : config.label;
+          const statusColor = awaitingInPerson
+            ? "bg-purple-100 text-purple-800 border-purple-200"
+            : config.color;
+          const StatusBadgeIcon = awaitingInPerson ? HandCoins : StatusIcon;
 
           return (
             <article
@@ -461,12 +683,20 @@ export function OrdersDashboard({
                   <h4 className="truncate font-medium">
                     {order.customer_name}
                   </h4>
-                  <p className="text-xs text-muted-foreground">
-                    {order.customer_email}
-                  </p>
+                  {order.customer_email && (
+                    <p className="text-xs text-muted-foreground">
+                      {order.customer_email}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-muted-foreground">
                     {formatDate(order.created_at)} • {deliveryShortLabel(order)}{" "}
-                    • {formatPrice(Number(order.total_amount))}
+                    • {formatCents(order.total_cents)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {paymentSummary(order)}
+                    {order.channel === "RECEPTION"
+                      ? " • lançado na recepção"
+                      : ""}
                   </p>
                   {formatFullAddress(order) && (
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -476,9 +706,9 @@ export function OrdersDashboard({
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${config.color}`}
+                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${statusColor}`}
                   >
-                    <StatusIcon className="size-3" />
+                    <StatusBadgeIcon className="size-3" />
                     {statusLabel}
                   </span>
                   {order.pickup_code && (
@@ -494,8 +724,46 @@ export function OrdersDashboard({
                 <OrderItemsButton
                   orderId={order.id}
                   customerName={order.customer_name}
-                  totalAmount={Number(order.total_amount)}
+                  totalCents={order.total_cents}
                 />
+
+                {/* Pagar na entrega: a equipe cobra e entrega no mesmo momento */}
+                {awaitingInPerson && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        setConfirmAction({
+                          kind: "settle",
+                          orderId: order.id,
+                          method: "CARD",
+                        })
+                      }
+                      className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                    >
+                      <CreditCard className="mr-1 size-3" />
+                      {isLoading ? "..." : "Recebi no cartão"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        setConfirmAction({
+                          kind: "settle",
+                          orderId: order.id,
+                          method: "CASH",
+                        })
+                      }
+                      className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                    >
+                      <Banknote className="mr-1 size-3" />
+                      {isLoading ? "..." : "Recebi em dinheiro"}
+                    </Button>
+                  </>
+                )}
 
                 {/* PAID → PREPARING */}
                 {order.status === "PAID" && (
@@ -570,8 +838,10 @@ export function OrdersDashboard({
                     </Button>
                   )}
 
-                {/* ADMIN: cancel order */}
-                {isAdmin && !["COMPLETED", "CANCELLED", "EXPIRED"].includes(order.status) && (
+                {/* Cancelar: ADMIN sempre; STAFF só o "pagar na entrega" ainda
+                    não cobrado (sem dinheiro nem estoque envolvidos). */}
+                {(isAdmin || awaitingInPerson) &&
+                  !["COMPLETED", "CANCELLED", "EXPIRED"].includes(order.status) && (
                   <Button
                     size="sm"
                     variant="ghost"

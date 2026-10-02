@@ -26,6 +26,7 @@ const sections = [
       'Dados de pagamento — nome completo, CPF e email são exigidos pelo Banco Central para pagamentos via PIX e são transmitidos diretamente ao Mercado Pago, que processa o pagamento. O CPF não é armazenado em nossos sistemas. O tratamento desses dados pelo Mercado Pago segue a política de privacidade deles.',
       'Avaliações anônimas — as avaliações de produtos não pedem nem exibem nenhuma identificação. Para impedir spam e abuso, guardamos apenas um identificador técnico irreversível (hash criptográfico do endereço IP), que não permite identificar você. Base legal: legítimo interesse.',
       'Métricas de uso — usamos o Vercel Analytics, uma ferramenta de métricas sem cookies que coleta dados agregados e anônimos (como páginas visitadas), sem identificar visitantes individualmente.',
+      'Métricas da loja — para entender onde as pessoas desistem da compra, registramos eventos anônimos de navegação (como abrir um produto, adicionar ao carrinho e avançar no checkout). Cada navegador recebe um código aleatório guardado no armazenamento local; ele não contém nome, email, CPF nem endereço IP, e não é cruzado com seus pedidos. Se o seu navegador estiver com "Não rastrear" (Do Not Track) ativado, nada é registrado.',
     ],
   },
   {

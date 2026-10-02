@@ -35,7 +35,7 @@ const steps = [
     number: "02",
     title: "Finalize o pedido",
     description:
-      "Pagamento rápido via Pix. Sem necessidade de criar conta ou fornecer informações pessoais.",
+      "Pague no cartão ou em dinheiro quando receber, sem informar nenhum dado. Se preferir, pague na hora via Pix.",
     color: "bg-pastel-lavender",
   },
   {

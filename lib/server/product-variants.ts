@@ -1,5 +1,6 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import type { Database, Json } from "@/lib/supabase/database.types";
+import { isCents } from "@/lib/money";
 
 export type PersistedVariantAttribute = {
   key: string;
@@ -10,7 +11,8 @@ export type PersistedProductVariant = {
   id: string;
   sku: string;
   label: string;
-  price: number;
+  /** Centavos. */
+  price_cents: number;
   stock_quantity: number;
   in_stock: boolean;
   images: string[];
@@ -38,7 +40,7 @@ export function parsePersistedProductVariants(
         typeof candidate.id !== "string" ||
         typeof candidate.sku !== "string" ||
         typeof candidate.label !== "string" ||
-        typeof candidate.price !== "number" ||
+        !isCents(candidate.price_cents) ||
         typeof candidate.stock_quantity !== "number" ||
         typeof candidate.in_stock !== "boolean"
       ) {
@@ -80,7 +82,7 @@ export function parsePersistedProductVariants(
         id: candidate.id,
         sku: candidate.sku,
         label: candidate.label,
-        price: candidate.price,
+        price_cents: candidate.price_cents,
         stock_quantity: candidate.stock_quantity,
         in_stock: candidate.in_stock,
         images,

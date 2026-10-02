@@ -11,7 +11,7 @@ export default async function AdminInventoryPage() {
 
   const { data: products } = await supabase
     .from("products")
-    .select("id,name,price,stock_quantity,variants")
+    .select("id,name,price_cents,stock_quantity,variants")
     .order("name", { ascending: true });
 
   const movementsResult = await getInventoryMovements(undefined, 100);
@@ -19,7 +19,7 @@ export default async function AdminInventoryPage() {
   const productOptions = (products ?? []).map((p) => ({
     id: p.id,
     name: p.name,
-    price: Number(p.price),
+    price_cents: p.price_cents,
     stock_quantity: p.stock_quantity ?? 0,
     variants: parsePersistedProductVariants(p.variants).map((variant) => ({
       id: variant.id,

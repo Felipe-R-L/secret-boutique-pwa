@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import { Product } from "@/lib/store/cart-store";
 import {
   formatVariantAttributes,
@@ -12,13 +13,6 @@ interface ProductVariantPickerProps {
   product: Product;
   selectedVariantId?: string | null;
   onSelect: (variantId: string | null) => void;
-}
-
-function formatPrice(price: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(price);
 }
 
 export function ProductVariantPicker({
@@ -103,7 +97,7 @@ export function ProductVariantPicker({
 
               <div className="mt-3 flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold">
-                  {formatPrice(variant.price)}
+                  {formatCents(variant.price_cents)}
                 </span>
                 <span
                   className={cn(

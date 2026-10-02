@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import React from "react";
 import Image from "next/image";
 import { ShoppingBag, Star } from "lucide-react";
@@ -43,13 +44,6 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
     showAddedToCartToast(product.name);
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
-  };
-
   return (
     <article
       role="button"
@@ -63,7 +57,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
           onSelect(product);
         }
       }}
-      className="group cursor-pointer overflow-hidden rounded-3xl bg-card ring-1 ring-border/50 transition-all duration-300 hover:ring-primary/20 hover:shadow-xl hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border/50 transition-all duration-300 hover:ring-primary/20 hover:shadow-xl hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <div className="relative aspect-square w-full overflow-hidden bg-muted">
         {/* Primary image */}
@@ -86,19 +80,15 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
           />
         )}
 
-        {/* In stock / low stock badge */}
-        {product.inStock &&
-          (lowStockQty ? (
-            <div className="absolute left-3 top-3 rounded-full bg-pastel-peach/95 px-2.5 py-1 text-[10px] font-semibold text-foreground backdrop-blur-sm">
-              {lowStockQty === 1
-                ? "Última unidade"
-                : `Últimas ${lowStockQty} unidades`}
-            </div>
-          ) : (
-            <div className="absolute left-3 top-3 rounded-full bg-pastel-sage/90 px-2.5 py-1 text-[10px] font-medium text-secondary-foreground backdrop-blur-sm">
-              Em estoque
-            </div>
-          ))}
+        {/* Só a escassez real vira selo: "Em estoque" em todo card é ruído
+            (o catálogo já lista apenas o que está disponível). */}
+        {product.inStock && lowStockQty && (
+          <div className="absolute left-3 top-3 rounded-full bg-pastel-peach/95 px-2.5 py-1 text-[10px] font-semibold text-foreground backdrop-blur-sm">
+            {lowStockQty === 1
+              ? "Última unidade"
+              : `Últimas ${lowStockQty} unidades`}
+          </div>
+        )}
 
         {productHasVariants && (
           <div className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
@@ -116,43 +106,45 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
         )}
       </div>
 
-      <div className="space-y-3 border-t border-border/50 p-3 text-center sm:p-4 sm:text-left">
-        <h3
-          className="line-clamp-2 text-sm font-medium leading-snug text-foreground sm:text-base"
-          style={{ fontFamily: "Inter, sans-serif" }}
-        >
-          {product.name}
-        </h3>
-
-        <div className="flex flex-col items-center justify-center gap-2 rounded-xl bg-muted/60 p-2 sm:flex-row sm:justify-between sm:gap-3 sm:p-2.5">
-          <div className="text-center sm:text-left">
-            {productHasVariants && (
-              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                A partir de
-              </p>
-            )}
-            <span className="font-sans text-sm font-semibold text-foreground sm:text-base">
-              {formatPrice(product.price)}
-            </span>
-          </div>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleAddToCart}
-            className="h-8 w-full sm:w-auto gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground cursor-pointer hover:bg-primary/90"
-            aria-label={
-              productHasVariants
-                ? `Ver opções de ${product.name}`
-                : `Adicionar ${product.name} ao carrinho`
-            }
+      {/* Nome e preço juntos, ação no pé do card: o botão fica na mesma
+          altura em toda a linha, mesmo com nomes de 1 ou 2 linhas. */}
+      <div className="flex flex-1 flex-col gap-3 border-t border-border/50 p-3 sm:p-4">
+        <div className="space-y-1">
+          <h3
+            className="line-clamp-2 text-sm font-medium leading-snug text-foreground sm:text-base"
+            style={{ fontFamily: "Inter, sans-serif" }}
           >
-            <ShoppingBag className="size-3.5 shrink-0" />
-            <span className="truncate">
-              {productHasVariants ? "Ver opções" : "Adicionar"}
-            </span>
-          </Button>
+            {product.name}
+          </h3>
+          <p className="font-sans text-base font-semibold text-foreground sm:text-lg">
+            {productHasVariants && (
+              <span
+                className="mr-1 text-xs font-normal text-muted-foreground"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                a partir de
+              </span>
+            )}
+            {formatCents(product.price_cents)}
+          </p>
         </div>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleAddToCart}
+          className="mt-auto h-11 w-full cursor-pointer gap-1.5 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 sm:h-10"
+          aria-label={
+            productHasVariants
+              ? `Ver opções de ${product.name}`
+              : `Adicionar ${product.name} ao carrinho`
+          }
+        >
+          <ShoppingBag className="size-4 shrink-0" />
+          <span className="truncate">
+            {productHasVariants ? "Ver opções" : "Adicionar"}
+          </span>
+        </Button>
       </div>
     </article>
   );

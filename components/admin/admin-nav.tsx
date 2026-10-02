@@ -9,6 +9,7 @@ const links: Array<{ href: string; label: string; adminOnly: boolean }> = [
   { href: "/admin/orders", label: "Pedidos", adminOnly: false },
   { href: "/admin/recepcao", label: "Recepção", adminOnly: false },
   { href: "/admin/dashboard", label: "Dashboard", adminOnly: true },
+  { href: "/admin/analytics", label: "Métricas", adminOnly: true },
   { href: "/admin/products", label: "Produtos", adminOnly: true },
   { href: "/admin/inventory", label: "Estoque", adminOnly: true },
   { href: "/admin/settings", label: "Configurações da Loja", adminOnly: true },

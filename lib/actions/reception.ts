@@ -5,17 +5,17 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { requireAdminContext } from "@/lib/auth/admin";
 import { logAudit } from "@/lib/audit/log";
-import { checkoutItemSchema } from "@/lib/schemas";
+import {
+  checkoutItemSchema,
+  IN_PERSON_PAYMENT_METHODS,
+  isInPersonPayment,
+  paymentMethodSchema,
+} from "@/lib/schemas";
 import {
   decrementOrderStockByVariants,
   parsePersistedProductVariants,
 } from "@/lib/server/product-variants";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-
-// Email "de fachada" usado só para montar o pedido Pix no Mercado Pago em vendas
-// de balcão (o cliente é anônimo e não informa email). Configurável via env.
-const RECEPTION_PIX_EMAIL =
-  process.env.RECEPTION_PIX_EMAIL || "vendas@thesecretboutique.com.br";
 
 function generatePickupCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -34,6 +34,11 @@ const receptionOrderSchema = z
     deliveryMethod: z.enum(["MOTEL_PICKUP", "ROOM_DELIVERY"]),
     roomNumber: z.string().trim().max(20).optional(),
     customerName: z.string().trim().max(120).optional(),
+    paymentMethod: paymentMethodSchema.default("PIX"),
+    // Centavos, até R$ 10.000.
+    cashChangeForCents: z.number().int().positive().max(1_000_000).optional(),
+    // Cartão/dinheiro já recebidos no balcão: o pedido nasce finalizado.
+    settleNow: z.boolean().default(false),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -54,22 +59,51 @@ const receptionOrderSchema = z
         path: ["roomNumber"],
       });
     }
+    if (
+      value.cashChangeForCents !== undefined &&
+      value.paymentMethod !== "CASH"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Troco só vale para pagamento em dinheiro.",
+        path: ["cashChangeForCents"],
+      });
+    }
+    if (value.settleNow && !isInPersonPayment(value.paymentMethod)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Pix é confirmado pelo Mercado Pago, não no balcão.",
+        path: ["settleNow"],
+      });
+    }
   });
 
 type ReceptionResult =
-  | { ok: true; orderId: string; totalAmount: number }
+  | {
+      ok: true;
+      orderId: string;
+      totalCents: number;
+      status: "PENDING" | "COMPLETED";
+      pickupCode: string | null;
+    }
   | { ok: false; error: string };
 
 /**
- * Cria um pedido lançado pela recepção (venda de balcão). Recalcula o total no
- * servidor a partir do preço atual do produto/variante e valida o estoque, igual
- * ao checkout do site. O pagamento é o mesmo Pix do site — a recepção gera o QR
- * com generatePixOrder e acompanha o status com checkOrderStatus.
+ * Cria um pedido lançado pela recepção — venda de balcão ou hóspede que pediu
+ * pelo telefone do quarto. Recalcula o total no servidor a partir do preço
+ * atual do produto/variante e valida o estoque, igual ao checkout do site.
+ *
+ * - Pix: a recepção gera o QR com generatePixOrder e acompanha com
+ *   checkOrderStatus.
+ * - Cartão/dinheiro: fica pendente até a entrega (confirmInPersonPayment) ou,
+ *   com settleNow, nasce finalizado porque o valor já foi recebido no balcão.
+ *
+ * Liberado para STAFF: quem opera a recepção é a equipe do motel.
  */
 export async function createReceptionOrder(
   input: unknown,
 ): Promise<ReceptionResult> {
-  const context = await requireAdminContext({ write: true });
+  const context = await requireAdminContext();
 
   const parsed = receptionOrderSchema.safeParse(input);
   if (!parsed.success) {
@@ -87,7 +121,7 @@ export async function createReceptionOrder(
   const productIds = parsed.data.items.map((item) => item.productId);
   const { data: products, error: productError } = await supabase
     .from("products")
-    .select("id,price,in_stock,stock_quantity,variants")
+    .select("id,price_cents,in_stock,stock_quantity,variants")
     .in("id", productIds);
 
   if (productError || !products) {
@@ -99,7 +133,7 @@ export async function createReceptionOrder(
 
   const productMap = new Map(products.map((product) => [product.id, product]));
 
-  let totalAmount = 0;
+  let totalCents = 0;
   for (const item of parsed.data.items) {
     const product = productMap.get(item.productId);
     if (!product) {
@@ -136,11 +170,20 @@ export async function createReceptionOrder(
       };
     }
 
-    totalAmount +=
-      Number(selectedVariant?.price ?? product.price) * item.quantity;
+    totalCents +=
+      (selectedVariant?.price_cents ?? product.price_cents) * item.quantity;
   }
 
-  totalAmount = Number(totalAmount.toFixed(2));
+
+  if (
+    parsed.data.cashChangeForCents !== undefined &&
+    parsed.data.cashChangeForCents < totalCents
+  ) {
+    return {
+      ok: false,
+      error: "O valor para troco precisa ser maior ou igual ao total.",
+    };
+  }
 
   // pickup code único
   let pickupCode = generatePickupCode();
@@ -156,19 +199,29 @@ export async function createReceptionOrder(
     retries++;
   }
 
+  const roomNumber =
+    parsed.data.deliveryMethod === "ROOM_DELIVERY"
+      ? (parsed.data.roomNumber?.trim() ?? null)
+      : null;
+  const customerName =
+    parsed.data.customerName?.trim() ||
+    (roomNumber ? `Quarto ${roomNumber}` : "Venda balcão");
+
   const { data: orderData, error: orderError } = await supabase
     .from("orders")
     .insert({
-      customer_name: parsed.data.customerName?.trim() || "Venda balcão",
-      customer_email: RECEPTION_PIX_EMAIL,
+      customer_name: customerName,
+      customer_email: null,
       delivery_method: parsed.data.deliveryMethod,
-      room_number:
-        parsed.data.deliveryMethod === "ROOM_DELIVERY"
-          ? (parsed.data.roomNumber?.trim() ?? null)
+      room_number: roomNumber,
+      payment_method: parsed.data.paymentMethod,
+      cash_change_for_cents:
+        parsed.data.paymentMethod === "CASH"
+          ? (parsed.data.cashChangeForCents ?? null)
           : null,
-      payment_method: "PIX" as const,
+      channel: "RECEPTION" as const,
       status: "PENDING" as const,
-      total_amount: totalAmount,
+      total_cents: totalCents,
       pickup_code: pickupCode,
     })
     .select("id")
@@ -195,7 +248,7 @@ export async function createReceptionOrder(
       variant_label: selectedVariant?.label ?? null,
       variant_attributes: selectedVariant?.attributes ?? null,
       quantity: item.quantity,
-      unit_price: Number(selectedVariant?.price ?? product.price),
+      unit_price_cents: selectedVariant?.price_cents ?? product.price_cents,
     };
   });
 
@@ -208,18 +261,165 @@ export async function createReceptionOrder(
     return { ok: false, error: itemsError.message };
   }
 
+  // Venda já recebida no balcão: se o acerto falhar, o pedido não pode
+  // ficar para trás como "a cobrar" — o caixa tentaria de novo e criaria uma
+  // duplicata de um dinheiro já recebido. Desfaz o pedido (itens em cascata).
+  if (parsed.data.settleNow) {
+    const settled = await settleInPersonOrder(
+      orderData.id,
+      parsed.data.paymentMethod as InPersonMethod,
+      true,
+      context,
+    );
+    if (!settled.ok) {
+      const { error: rollbackError } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", orderData.id)
+        .eq("status", "PENDING");
+      if (rollbackError) {
+        console.error("Falha ao desfazer venda de balcão:", rollbackError);
+        return {
+          ok: false,
+          error: `${settled.error} O pedido ${orderData.id.slice(0, 8)} ficou pendente em Pedidos — finalize por lá em vez de lançar de novo.`,
+        };
+      }
+      return { ok: false, error: `${settled.error} Nada foi registrado.` };
+    }
+  }
+
   await logAudit(
     {
       action: "order.create",
       category: "order",
       targetType: "order",
       targetId: orderData.id,
-      targetLabel: parsed.data.customerName?.trim() || "Venda balcão",
+      targetLabel: customerName,
       metadata: {
         via: "reception",
-        total: totalAmount,
+        totalCents,
         deliveryMethod: parsed.data.deliveryMethod,
+        paymentMethod: parsed.data.paymentMethod,
         items: parsed.data.items.length,
+      },
+    },
+    context,
+  );
+
+  if (parsed.data.settleNow) {
+    return {
+      ok: true,
+      orderId: orderData.id,
+      totalCents,
+      status: "COMPLETED",
+      pickupCode,
+    };
+  }
+
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin/inventory");
+
+  return {
+    ok: true,
+    orderId: orderData.id,
+    totalCents,
+    status: "PENDING",
+    pickupCode,
+  };
+}
+
+type InPersonMethod = (typeof IN_PERSON_PAYMENT_METHODS)[number];
+
+type SettleResult =
+  | { ok: true; pickupCode: string; status: "PAID" | "COMPLETED" }
+  | { ok: false; error: string };
+
+/**
+ * Registra o recebimento presencial (cartão na maquininha ou dinheiro) de um
+ * pedido pendente: grava a forma real de pagamento, move para PAID — ou direto
+ * para COMPLETED quando a entrega acontece no mesmo momento — e dá baixa no
+ * estoque. Guardado por PENDING para não rodar duas vezes.
+ */
+async function settleInPersonOrder(
+  orderId: string,
+  method: InPersonMethod,
+  complete: boolean,
+  context: Awaited<ReturnType<typeof requireAdminContext>>,
+): Promise<SettleResult> {
+  const supabase = createServiceRoleClient();
+
+  const { data: order, error: lookupError } = await supabase
+    .from("orders")
+    .select("id,status,pickup_code,payment_method,delivery_method")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (lookupError || !order) {
+    return { ok: false, error: "Pedido não encontrado." };
+  }
+
+  if (order.status !== "PENDING") {
+    return {
+      ok: false,
+      error: `Pedido não está pendente (status atual: ${order.status}).`,
+    };
+  }
+
+  if (order.delivery_method === "HOME_DELIVERY") {
+    return {
+      ok: false,
+      error: "Entrega a domicílio é paga só por Pix.",
+    };
+  }
+
+  const pickupCode = order.pickup_code ?? generatePickupCode();
+  const now = new Date().toISOString();
+  const nextStatus = complete ? ("COMPLETED" as const) : ("PAID" as const);
+
+  const { data: updatedRows } = await supabase
+    .from("orders")
+    .update({
+      status: nextStatus,
+      payment_method: method,
+      // Troco só faz sentido em dinheiro; se mudou para cartão, limpa.
+      ...(method === "CARD" ? { cash_change_for_cents: null } : {}),
+      pickup_code: pickupCode,
+      ...(complete ? { completed_at: now } : {}),
+      updated_at: now,
+    })
+    .eq("id", order.id)
+    .eq("status", "PENDING")
+    .select("id");
+
+  if ((updatedRows?.length ?? 0) === 0) {
+    return {
+      ok: false,
+      error: "O pedido já foi confirmado por outro caminho.",
+    };
+  }
+
+  try {
+    await decrementOrderStockByVariants(supabase, order.id);
+  } catch (stockError) {
+    console.error(
+      "Falha ao baixar estoque na confirmação presencial:",
+      stockError,
+    );
+  }
+
+  await logAudit(
+    {
+      action: complete ? "order.complete" : "order.status_change",
+      category: "order",
+      targetType: "order",
+      targetId: order.id,
+      targetLabel: order.id.slice(0, 8),
+      metadata: {
+        from: "PENDING",
+        to: nextStatus,
+        via: "in_person_payment",
+        paymentMethod: method,
+        previousPaymentMethod: order.payment_method,
       },
     },
     context,
@@ -228,81 +428,35 @@ export async function createReceptionOrder(
   revalidatePath("/admin/orders");
   revalidatePath("/admin/inventory");
 
-  return { ok: true, orderId: orderData.id, totalAmount };
+  return { ok: true, pickupCode, status: nextStatus };
 }
 
+const confirmInPersonSchema = z
+  .object({
+    orderId: z.string().uuid(),
+    method: z.enum(IN_PERSON_PAYMENT_METHODS),
+    // true: pagou e já recebeu os produtos (entrega no quarto / balcão).
+    complete: z.boolean().default(true),
+  })
+  .strict();
+
 /**
- * Confirma manualmente o pagamento de uma venda de balcão paga "por fora" (cartão
- * na maquininha ou dinheiro). Faz a mesma baixa de estoque do fluxo Pix e move o
- * pedido para PAID. Guardado por PENDING para não rodar duas vezes.
+ * Confirma o pagamento presencial de um pedido pendente — tanto os pedidos
+ * "pagar na entrega" do site quanto uma cobrança Pix que o hóspede acabou
+ * pagando no cartão ou em dinheiro. Liberado para STAFF.
  */
-export async function markReceptionOrderPaid(orderId: unknown) {
-  const context = await requireAdminContext({ write: true });
+export async function confirmInPersonPayment(input: unknown) {
+  const context = await requireAdminContext();
 
-  const parsed = z.object({ orderId: z.string().uuid() }).safeParse({ orderId });
+  const parsed = confirmInPersonSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false as const, error: "Pedido inválido." };
+    return { ok: false as const, error: "Dados inválidos para confirmar." };
   }
 
-  const supabase = createServiceRoleClient();
-
-  const { data: order, error: lookupError } = await supabase
-    .from("orders")
-    .select("id,status,pickup_code")
-    .eq("id", parsed.data.orderId)
-    .maybeSingle();
-
-  if (lookupError || !order) {
-    return { ok: false as const, error: "Pedido não encontrado." };
-  }
-
-  if (order.status !== "PENDING") {
-    return {
-      ok: false as const,
-      error: `Pedido não está pendente (status atual: ${order.status}).`,
-    };
-  }
-
-  const pickupCode = order.pickup_code ?? generatePickupCode();
-
-  const { data: updatedRows } = await supabase
-    .from("orders")
-    .update({
-      status: "PAID",
-      pickup_code: pickupCode,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", order.id)
-    .eq("status", "PENDING")
-    .select("id");
-
-  if ((updatedRows?.length ?? 0) === 0) {
-    return {
-      ok: false as const,
-      error: "O pedido já foi confirmado por outro caminho.",
-    };
-  }
-
-  try {
-    await decrementOrderStockByVariants(supabase, order.id);
-  } catch (stockError) {
-    console.error("Falha ao baixar estoque na confirmação manual:", stockError);
-  }
-
-  await logAudit(
-    {
-      action: "order.status_change",
-      category: "order",
-      targetType: "order",
-      targetId: order.id,
-      targetLabel: order.id.slice(0, 8),
-      metadata: { from: "PENDING", to: "PAID", via: "manual_reception" },
-    },
+  return settleInPersonOrder(
+    parsed.data.orderId,
+    parsed.data.method,
+    parsed.data.complete,
     context,
   );
-
-  revalidatePath("/admin/orders");
-  revalidatePath("/admin/inventory");
-
-  return { ok: true as const, pickupCode };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import Image from "next/image";
 import {
   Plus,
@@ -34,7 +35,7 @@ import {
 import { useCartStore, Product } from "@/lib/store/cart-store";
 import { getPrimaryProductImage, getProductImages } from "@/lib/product-images";
 import {
-  getEffectiveProductPrice,
+  getEffectiveProductPriceCents,
   getProductVariant,
   hasProductVariants,
   isProductAvailable,
@@ -195,19 +196,12 @@ export function ProductModal({
     onOpenChange(false);
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
-  };
-
   if (!product) return null;
 
   const selectedVariant = getProductVariant(product, selectedVariantId);
   const productHasVariants = hasProductVariants(product);
   const productImages = getProductImages(product, selectedVariantId);
-  const effectivePrice = getEffectiveProductPrice(product, selectedVariantId);
+  const effectivePriceCents = getEffectiveProductPriceCents(product, selectedVariantId);
   const currentInStock = isProductAvailable(product, selectedVariantId);
   const addToCartDisabled =
     !currentInStock || (productHasVariants && !selectedVariant);
@@ -417,7 +411,7 @@ export function ProductModal({
                 className="text-3xl font-bold text-foreground lg:text-4xl"
                 style={{ fontFamily: "Playfair Display, serif" }}
               >
-                {formatPrice(effectivePrice)}
+                {formatCents(effectivePriceCents)}
               </DialogDescription>
 
               {productHasVariants && !selectedVariant && (
@@ -589,7 +583,7 @@ export function ProductModal({
                 {productHasVariants && !selectedVariant
                   ? "Escolha uma variante"
                   : currentInStock
-                    ? `Adicionar ao Carrinho - ${formatPrice(effectivePrice * quantity)}`
+                    ? `Adicionar ao Carrinho - ${formatCents(effectivePriceCents * quantity)}`
                     : "Sem estoque"}
               </Button>
             </div>

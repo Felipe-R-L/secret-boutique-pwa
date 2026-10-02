@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { trackEvent } from "@/lib/analytics/client";
 
 export interface ProductSpecs {
   [key: string]: string;
@@ -14,7 +15,8 @@ export interface ProductVariant {
   id: string;
   sku: string;
   label: string;
-  price: number;
+  /** Centavos (R$ 49,90 = 4990). */
+  price_cents: number;
   stock_quantity: number;
   in_stock: boolean;
   images?: string[];
@@ -25,7 +27,8 @@ export interface ProductVariant {
 export interface Product {
   id: string;
   name: string;
-  price: number;
+  /** Centavos; com variações, é o menor preço entre elas. */
+  price_cents: number;
   description: string;
   curatorship?: string | null;
   image?: string;
@@ -49,8 +52,9 @@ export interface CartItem {
   quantity: number;
 }
 
-export function getCartItemUnitPrice(item: CartItem): number {
-  return item.variant?.price ?? item.product.price;
+/** Preço unitário do item, em centavos. */
+export function getCartItemUnitPriceCents(item: CartItem): number {
+  return item.variant?.price_cents ?? item.product.price_cents;
 }
 
 export function getCartItemKey(productId: string, variantId?: string | null) {
@@ -67,7 +71,8 @@ interface CartStore {
     quantity: number,
   ) => void;
   clearCart: () => void;
-  getTotal: () => number;
+  /** Total do carrinho, em centavos. */
+  getTotalCents: () => number;
   getItemCount: () => number;
 }
 
@@ -77,6 +82,11 @@ export const useCartStore = create<CartStore>()(
       items: [],
 
   addItem: (product: Product, variant?: ProductVariant) => {
+    trackEvent("add_to_cart", {
+      productId: product.id,
+      valueCents: variant?.price_cents ?? product.price_cents,
+      props: { qty: 1 },
+    });
     set((state) => {
       const existingItem = state.items.find(
         (item) =>
@@ -100,6 +110,17 @@ export const useCartStore = create<CartStore>()(
   },
 
   removeItem: (productId: string, variantId?: string) => {
+    const removed = get().items.find(
+      (item) =>
+        getCartItemKey(item.product.id, item.variant?.id) ===
+        getCartItemKey(productId, variantId),
+    );
+    if (removed) {
+      trackEvent("remove_from_cart", {
+        productId,
+        valueCents: getCartItemUnitPriceCents(removed) * removed.quantity,
+      });
+    }
     set((state) => ({
       items: state.items.filter(
         (item) =>
@@ -131,9 +152,9 @@ export const useCartStore = create<CartStore>()(
 
   clearCart: () => set({ items: [] }),
 
-  getTotal: () => {
+  getTotalCents: () => {
     return get().items.reduce(
-      (total, item) => total + getCartItemUnitPrice(item) * item.quantity,
+      (total, item) => total + getCartItemUnitPriceCents(item) * item.quantity,
       0,
     );
   },
@@ -144,6 +165,10 @@ export const useCartStore = create<CartStore>()(
     }),
     {
       name: "secret-boutique-cart",
+      // v1: preços em centavos. Carrinho salvo antes disso tem preço em
+      // reais e é descartado (vive só na sessão, então não perde muito).
+      version: 1,
+      migrate: () => ({ items: [] }),
       // sessionStorage: o carrinho sobrevive a reloads, mas morre ao fechar o
       // navegador — meio-termo alinhado à proposta de privacidade da loja.
       storage: createJSONStorage(() => sessionStorage),

@@ -9,6 +9,7 @@ import { CartBar } from '@/components/cart-bar';
 import { AgeGate } from '@/components/age-gate';
 import { RoomParamCapture } from '@/components/room-param-capture';
 import { WhatsappFab } from '@/components/whatsapp-fab';
+import { PageViewTracker } from '@/components/analytics/page-view-tracker';
 import './globals.css';
 
 const _geist = Geist({ subsets: ['latin'] });
@@ -126,6 +127,7 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <CartHydration />
         <RoomParamCapture />
+        <PageViewTracker />
         {children}
         <CartBar />
         <WhatsappFab />

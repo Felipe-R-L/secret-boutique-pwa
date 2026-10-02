@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { getOrderById } from '@/lib/mercadopago/client';
 import { decrementOrderStockByVariants } from '@/lib/server/product-variants';
 import { sendVoucherEmail } from '@/lib/services/email';
-import { sendPushToAdmins } from '@/lib/push/server';
+import { notifyStaffOfNewOrder } from '@/lib/notifications/new-order';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 function generatePickupCode(): string {
@@ -193,7 +193,7 @@ export async function POST(request: Request) {
   const { data: order, error: orderLookupError } = await supabase
     .from('orders')
     .select(
-      'id,status,pickup_code,customer_name,total_amount,delivery_method,room_number',
+      'id,status,pickup_code,customer_name,total_cents,delivery_method,room_number,payment_method',
     )
     .eq('mercadopago_order_id', mpOrderId)
     .maybeSingle();
@@ -208,6 +208,18 @@ export async function POST(request: Request) {
 
   if (order.status === mappedStatus) {
     return NextResponse.json({ ok: true, idempotent: true });
+  }
+
+  // O Pix só decide pedidos que ainda aguardam pagamento. Se a recepção já
+  // recebeu no cartão/dinheiro (payment_method mudou) ou o pedido já andou no
+  // fluxo, um aviso atrasado — QR expirado, reenvio do webhook — não pode
+  // voltar o status nem baixar o estoque de novo.
+  if (order.payment_method !== 'PIX' || order.status !== 'PENDING') {
+    return NextResponse.json({
+      ok: true,
+      ignored: true,
+      reason: 'Order no longer awaiting Pix',
+    });
   }
 
   // Generate pickup code if transitioning to PAID and none exists
@@ -267,24 +279,7 @@ export async function POST(request: Request) {
       console.error('Failed sending voucher email', emailError);
     }
 
-    try {
-      const total = new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      }).format(Number(order.total_amount));
-      const destino =
-        order.delivery_method === 'ROOM_DELIVERY'
-          ? `Quarto ${order.room_number ?? ''}`.trim()
-          : 'Portaria';
-      await sendPushToAdmins({
-        title: 'Novo pedido pago 🛍️',
-        body: `${order.customer_name} • ${total} • ${destino}`,
-        url: '/admin/orders',
-        tag: `order-${order.id}`,
-      });
-    } catch (pushError) {
-      console.error('Failed sending push notification', pushError);
-    }
+    await notifyStaffOfNewOrder(order.id);
   }
 
   return NextResponse.json({

@@ -1,3 +1,4 @@
+import { isCents } from "@/lib/money";
 import {
   ProductsAdminPanel,
   type AdminProductCard,
@@ -40,7 +41,7 @@ function parseVariants(value: Json | null): AdminProductCard["variants"] {
         typeof candidate.id !== "string" ||
         typeof candidate.sku !== "string" ||
         typeof candidate.label !== "string" ||
-        typeof candidate.price !== "number" ||
+        !isCents(candidate.price_cents) ||
         typeof candidate.stock_quantity !== "number" ||
         typeof candidate.in_stock !== "boolean"
       ) {
@@ -51,7 +52,7 @@ function parseVariants(value: Json | null): AdminProductCard["variants"] {
         id: candidate.id,
         sku: candidate.sku,
         label: candidate.label,
-        price: candidate.price,
+        priceCents: candidate.price_cents,
         stockQuantity: candidate.stock_quantity,
         inStock: candidate.in_stock,
         isDefault: candidate.is_default === true,
@@ -106,7 +107,7 @@ export default async function AdminProductsPage() {
   const { data: products, error: productsError } = await supabase
     .from("products")
     .select(
-      "id,name,price,description,curatorship,category,in_stock,stock_quantity,is_featured,is_adult,images,image_url,specs,variants,created_at",
+      "id,name,price_cents,description,curatorship,category,in_stock,stock_quantity,is_featured,is_adult,images,image_url,specs,variants,created_at",
     )
     .order("created_at", { ascending: false });
 
@@ -133,7 +134,7 @@ export default async function AdminProductsPage() {
     (product) => ({
       id: product.id,
       name: product.name,
-      price: Number(product.price),
+      priceCents: product.price_cents,
       description: product.description ?? "",
       curatorship: product.curatorship ?? "",
       category: product.category,

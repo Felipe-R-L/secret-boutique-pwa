@@ -5,6 +5,7 @@ import type {
   ProductVariant,
   ProductVariantAttribute,
 } from "@/lib/store/cart-store";
+import { isCents } from "@/lib/money";
 
 const DEFAULT_HERO_TITLE = "Descubra o prazer do autocuidado";
 const DEFAULT_HERO_SUBTITLE =
@@ -74,7 +75,7 @@ function parseProductVariants(
       typeof candidate.id !== "string" ||
       typeof candidate.sku !== "string" ||
       typeof candidate.label !== "string" ||
-      typeof candidate.price !== "number" ||
+      !isCents(candidate.price_cents) ||
       typeof candidate.stock_quantity !== "number" ||
       typeof candidate.in_stock !== "boolean"
     ) {
@@ -85,7 +86,7 @@ function parseProductVariants(
       id: candidate.id,
       sku: candidate.sku,
       label: candidate.label,
-      price: candidate.price,
+      price_cents: candidate.price_cents,
       stock_quantity: candidate.stock_quantity,
       in_stock: candidate.in_stock,
       images: parseProductImageUrls(
@@ -109,7 +110,7 @@ function mapProduct(row: ProductRow): Product {
   return {
     id: row.id,
     name: row.name,
-    price: Number(row.price),
+    price_cents: row.price_cents,
     description: row.description ?? "",
     curatorship: row.curatorship,
     image: row.image ?? undefined,
@@ -135,7 +136,7 @@ export async function getCatalogData() {
     supabase
       .from("products")
       .select(
-        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,is_adult,variants,created_at,updated_at",
+        "id,name,price_cents,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,is_adult,variants,created_at,updated_at",
       )
       .eq("in_stock", true)
       .order("created_at", { ascending: false }),
@@ -152,7 +153,7 @@ export async function getCatalogData() {
     productsResult = (await supabase
       .from("products")
       .select(
-        "id,name,price,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,variants,created_at,updated_at",
+        "id,name,price_cents,description,curatorship,images,image,image_url,category,specs,rating,reviews,in_stock,stock_quantity,is_featured,variants,created_at,updated_at",
       )
       .eq("in_stock", true)
       .order("created_at", {

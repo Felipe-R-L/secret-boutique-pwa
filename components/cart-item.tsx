@@ -1,10 +1,11 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import Image from "next/image";
 import { Plus, Minus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  getCartItemUnitPrice,
+  getCartItemUnitPriceCents,
   useCartStore,
   CartItem as CartItemType,
 } from "@/lib/store/cart-store";
@@ -41,13 +42,6 @@ export function CartItem({ item }: CartItemProps) {
     });
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
-  };
-
   return (
     <div className="flex gap-3 rounded-xl border border-border bg-card p-3">
       <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-muted">
@@ -71,7 +65,7 @@ export function CartItem({ item }: CartItemProps) {
             </p>
           )}
           <p className="text-sm font-semibold text-foreground">
-            {formatPrice(getCartItemUnitPrice(item))}
+            {formatCents(getCartItemUnitPriceCents(item))}
           </p>
         </div>
 
@@ -79,7 +73,8 @@ export function CartItem({ item }: CartItemProps) {
           <div className="flex items-center gap-2 rounded-lg bg-secondary p-0.5">
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
+              className="size-10"
               onClick={() =>
                 updateQuantity(
                   item.product.id,
@@ -91,12 +86,13 @@ export function CartItem({ item }: CartItemProps) {
             >
               <Minus className="size-3" />
             </Button>
-            <span className="w-6 text-center text-sm font-medium">
+            <span className="w-6 text-center text-sm font-medium tabular-nums">
               {item.quantity}
             </span>
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
+              className="size-10"
               onClick={() =>
                 updateQuantity(
                   item.product.id,
@@ -112,9 +108,9 @@ export function CartItem({ item }: CartItemProps) {
 
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             onClick={handleRemove}
-            className="text-muted-foreground hover:text-destructive"
+            className="size-10 text-muted-foreground hover:text-destructive"
             aria-label="Remover item"
           >
             <Trash2 className="size-4" />

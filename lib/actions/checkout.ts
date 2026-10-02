@@ -1,6 +1,11 @@
 "use server";
 
-import { initializeCheckoutSchema, HOME_DELIVERY_FEE } from "@/lib/schemas";
+import { centsToDecimalString } from "@/lib/money";
+import {
+  initializeCheckoutSchema,
+  HOME_DELIVERY_FEE_CENTS,
+  isInPersonPayment,
+} from "@/lib/schemas";
 import {
   createPixOrder,
   extractPixData,
@@ -11,7 +16,18 @@ import {
   parsePersistedProductVariants,
 } from "@/lib/server/product-variants";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { notifyStaffOfNewOrder } from "@/lib/notifications/new-order";
 import { randomBytes } from "node:crypto";
+
+// Email "de fachada" para montar o pedido Pix no Mercado Pago quando o pedido
+// não tem email (venda lançada pela recepção). Configurável via env.
+const FALLBACK_PIX_PAYER_EMAIL =
+  process.env.RECEPTION_PIX_EMAIL || "vendas@thesecretboutique.com.br";
+
+// Anti-trote: pedidos com pagamento na entrega ainda não pagos por quarto.
+// Passou disso, o hóspede fala com a recepção.
+const MAX_OPEN_IN_PERSON_ORDERS_PER_ROOM = 2;
+const OPEN_ORDER_WINDOW_MS = 3 * 60 * 60 * 1000;
 
 function generatePickupCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -24,7 +40,13 @@ function generatePickupCode(): string {
 }
 
 type CheckoutResult =
-  | { ok: true; orderId: string; totalAmount: number }
+  | {
+      ok: true;
+      orderId: string;
+      totalCents: number;
+      pickupCode: string;
+      paymentMethod: "PIX" | "CARD" | "CASH";
+    }
   | { ok: false; error: string };
 
 export async function initializeCheckout(
@@ -46,7 +68,7 @@ export async function initializeCheckout(
   const productIds = parsed.data.items.map((item) => item.productId);
   const { data: products, error: productError } = await supabase
     .from("products")
-    .select("id,price,in_stock,stock_quantity,variants")
+    .select("id,price_cents,in_stock,stock_quantity,variants")
     .in("id", productIds);
 
   if (productError || !products) {
@@ -58,7 +80,7 @@ export async function initializeCheckout(
 
   const productMap = new Map(products.map((product) => [product.id, product]));
 
-  let totalAmount = 0;
+  let totalCents = 0;
   for (const item of parsed.data.items) {
     const product = productMap.get(item.productId);
     if (!product) {
@@ -98,16 +120,50 @@ export async function initializeCheckout(
       };
     }
 
-    totalAmount +=
-      Number(selectedVariant?.price ?? product.price) * item.quantity;
+    totalCents +=
+      (selectedVariant?.price_cents ?? product.price_cents) * item.quantity;
   }
 
   // Taxa fixa para entrega a domicílio; retirada/quarto não têm frete.
-  const deliveryFee =
-    parsed.data.deliveryMethod === "HOME_DELIVERY" ? HOME_DELIVERY_FEE : 0;
-  totalAmount += deliveryFee;
+  const deliveryFeeCents =
+    parsed.data.deliveryMethod === "HOME_DELIVERY" ? HOME_DELIVERY_FEE_CENTS : 0;
+  totalCents += deliveryFeeCents;
 
-  totalAmount = Number(totalAmount.toFixed(2));
+  const paymentMethod = parsed.data.paymentMethod;
+  const inPerson = isInPersonPayment(paymentMethod);
+  const roomNumber =
+    parsed.data.deliveryMethod === "ROOM_DELIVERY"
+      ? (parsed.data.roomNumber?.trim() ?? null)
+      : null;
+
+  if (
+    parsed.data.cashChangeForCents !== undefined &&
+    parsed.data.cashChangeForCents < totalCents
+  ) {
+    return {
+      ok: false,
+      error: "O valor para troco precisa ser maior ou igual ao total do pedido.",
+    };
+  }
+
+  if (inPerson && roomNumber) {
+    const since = new Date(Date.now() - OPEN_ORDER_WINDOW_MS).toISOString();
+    const { count } = await supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("room_number", roomNumber)
+      .eq("status", "PENDING")
+      .in("payment_method", ["CARD", "CASH"])
+      .gte("created_at", since);
+
+    if ((count ?? 0) >= MAX_OPEN_IN_PERSON_ORDERS_PER_ROOM) {
+      return {
+        ok: false,
+        error:
+          "Este quarto já tem pedidos aguardando entrega. Para pedir mais, fale com a recepção.",
+      };
+    }
+  }
 
   // Generate a unique pickup code
   let pickupCode = generatePickupCode();
@@ -126,15 +182,17 @@ export async function initializeCheckout(
 
   const isHomeDelivery = parsed.data.deliveryMethod === "HOME_DELIVERY";
 
+  // Pagamento presencial não pede nome: identifica o pedido pelo quarto.
+  const customerName =
+    parsed.data.customerName?.trim() ||
+    (roomNumber ? `Quarto ${roomNumber}` : "Cliente na recepção");
+
   const orderInsert = {
-    customer_name: parsed.data.customerName,
-    customer_email: parsed.data.customerEmail,
+    customer_name: customerName,
+    customer_email: inPerson ? null : (parsed.data.customerEmail ?? null),
     delivery_method: parsed.data.deliveryMethod,
-    room_number:
-      parsed.data.deliveryMethod === "ROOM_DELIVERY"
-        ? (parsed.data.roomNumber?.trim() ?? null)
-        : null,
-    delivery_fee: deliveryFee,
+    room_number: roomNumber,
+    delivery_fee_cents: deliveryFeeCents,
     delivery_cep: isHomeDelivery
       ? ((parsed.data.deliveryCep ?? "").replace(/\D/g, "") || null)
       : null,
@@ -156,9 +214,12 @@ export async function initializeCheckout(
     delivery_state: isHomeDelivery
       ? (parsed.data.deliveryState?.trim().toUpperCase() ?? null)
       : null,
-    payment_method: "PIX" as const,
+    payment_method: paymentMethod,
+    cash_change_for_cents:
+      paymentMethod === "CASH" ? (parsed.data.cashChangeForCents ?? null) : null,
+    channel: "SITE" as const,
     status: "PENDING" as const,
-    total_amount: totalAmount,
+    total_cents: totalCents,
     pickup_code: pickupCode,
   };
 
@@ -189,7 +250,7 @@ export async function initializeCheckout(
       variant_label: selectedVariant?.label ?? null,
       variant_attributes: selectedVariant?.attributes ?? null,
       quantity: item.quantity,
-      unit_price: Number(selectedVariant?.price ?? product.price),
+      unit_price_cents: selectedVariant?.price_cents ?? product.price_cents,
     };
   });
 
@@ -202,10 +263,18 @@ export async function initializeCheckout(
     return { ok: false, error: itemsError.message };
   }
 
+  // Pix avisa a equipe quando o pagamento confirma (webhook). No presencial
+  // não há confirmação online: o aviso sai agora, para a recepção preparar.
+  if (inPerson) {
+    await notifyStaffOfNewOrder(orderData.id);
+  }
+
   return {
     ok: true,
     orderId: orderData.id,
-    totalAmount,
+    totalCents,
+    pickupCode,
+    paymentMethod,
   };
 }
 
@@ -217,7 +286,7 @@ export async function checkOrderStatus(orderId: unknown) {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("orders")
-    .select("id,status,total_amount,pickup_code,mercadopago_order_id")
+    .select("id,status,total_cents,pickup_code,mercadopago_order_id")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -271,7 +340,7 @@ export async function checkOrderStatus(orderId: unknown) {
           // banco para não exibir um código diferente do gravado.
           const { data: fresh } = await supabase
             .from("orders")
-            .select("id,status,total_amount,pickup_code")
+            .select("id,status,total_cents,pickup_code")
             .eq("id", data.id)
             .maybeSingle();
 
@@ -280,7 +349,7 @@ export async function checkOrderStatus(orderId: unknown) {
             data: {
               id: data.id,
               status: fresh?.status ?? "PAID",
-              totalAmount: Number(fresh?.total_amount ?? data.total_amount),
+              totalCents: fresh?.total_cents ?? data.total_cents,
               pickupCode: fresh?.pickup_code ?? null,
             },
           };
@@ -303,12 +372,16 @@ export async function checkOrderStatus(orderId: unknown) {
           console.error("Failed to send voucher email:", emailErr);
         }
 
+        // Confirmado por aqui, o webhook vai ignorar o pedido (já não está
+        // PENDING) — então o aviso à equipe precisa sair deste caminho.
+        await notifyStaffOfNewOrder(data.id);
+
         return {
           ok: true as const,
           data: {
             id: data.id,
             status: "PAID",
-            totalAmount: Number(data.total_amount),
+            totalCents: data.total_cents,
             pickupCode,
           },
         };
@@ -324,7 +397,7 @@ export async function checkOrderStatus(orderId: unknown) {
     data: {
       id: data.id,
       status: data.status,
-      totalAmount: Number(data.total_amount),
+      totalCents: data.total_cents,
       pickupCode: data.pickup_code,
     },
   };
@@ -351,7 +424,7 @@ export async function generatePixOrder(
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select(
-      "id,customer_name,customer_email,total_amount,status,mercadopago_order_id",
+      "id,customer_name,customer_email,payment_method,total_cents,status,mercadopago_order_id",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -360,6 +433,13 @@ export async function generatePixOrder(
     return {
       ok: false as const,
       error: orderError?.message ?? "Order not found",
+    };
+  }
+
+  if (order.payment_method !== "PIX") {
+    return {
+      ok: false as const,
+      error: "Este pedido é pago na entrega, não por Pix.",
     };
   }
 
@@ -376,10 +456,10 @@ export async function generatePixOrder(
       type: "online",
       processing_mode: "automatic",
       external_reference: order.id,
-      total_amount: String(Number(order.total_amount).toFixed(2)),
+      total_amount: centsToDecimalString(order.total_cents),
       description: `Pedido ${order.id}`,
       payer: {
-        email: order.customer_email,
+        email: order.customer_email ?? FALLBACK_PIX_PAYER_EMAIL,
         first_name: firstName,
         last_name: lastName,
         ...(payerInfo?.cpf
@@ -394,7 +474,7 @@ export async function generatePixOrder(
       transactions: {
         payments: [
           {
-            amount: String(Number(order.total_amount).toFixed(2)),
+            amount: centsToDecimalString(order.total_cents),
             payment_method: {
               id: "pix",
               type: "bank_transfer",
