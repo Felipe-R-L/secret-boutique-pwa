@@ -16,6 +16,16 @@ export const deliveryMethodSchema = z.enum([
   "HOME_DELIVERY",
 ]);
 
+export const paymentMethodSchema = z.enum(["PIX", "CARD", "CASH"]);
+
+// Cartão na maquininha ou dinheiro: pagos na entrega (quarto) ou na retirada
+// (recepção). Só existem dentro do motel — entrega a domicílio é sempre Pix.
+export const IN_PERSON_PAYMENT_METHODS = ["CARD", "CASH"] as const;
+
+export function isInPersonPayment(method: string | null | undefined) {
+  return method === "CARD" || method === "CASH";
+}
+
 // Taxa fixa de entrega a domicílio (R$). Fonte da verdade compartilhada
 // entre o cálculo server-side (checkout) e a exibição no formulário.
 export const HOME_DELIVERY_FEE = 5;
@@ -129,12 +139,16 @@ export const initializeCheckoutSchema = z
     deliveryNeighborhood: z.string().trim().max(120).optional(),
     deliveryCity: z.string().trim().max(120).optional(),
     deliveryState: z.string().trim().max(2).optional(),
-    customerName: z.string().trim().min(2).max(120),
-    customerEmail: z.string().trim().email().max(180),
-    payerFirstName: z.string().trim().min(1).max(60),
-    payerLastName: z.string().trim().min(1).max(60),
-    payerCpf: cpfSchema,
-    paymentMethod: z.literal("PIX"),
+    // Nome, email e dados do pagador só são exigidos no Pix (o Mercado Pago
+    // precisa deles). No pagamento presencial o nome é opcional.
+    customerName: z.string().trim().max(120).optional(),
+    customerEmail: z.string().trim().email().max(180).optional(),
+    payerFirstName: z.string().trim().min(1).max(60).optional(),
+    payerLastName: z.string().trim().min(1).max(60).optional(),
+    payerCpf: cpfSchema.optional(),
+    paymentMethod: paymentMethodSchema,
+    // Dinheiro: valor da nota para a recepção levar o troco.
+    cashChangeFor: z.number().positive().max(10000).optional(),
     items: z.array(checkoutItemSchema).min(1),
   })
   .strict()
@@ -156,6 +170,45 @@ export const initializeCheckoutSchema = z
         code: z.ZodIssueCode.custom,
         message: "roomNumber must be empty unless ROOM_DELIVERY",
         path: ["roomNumber"],
+      });
+    }
+
+    if (value.paymentMethod === "PIX") {
+      if (!value.customerName || value.customerName.length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Informe seu nome para pagar com Pix",
+          path: ["customerName"],
+        });
+      }
+      const payerFields: Array<[keyof typeof value, unknown]> = [
+        ["customerEmail", value.customerEmail],
+        ["payerFirstName", value.payerFirstName],
+        ["payerLastName", value.payerLastName],
+        ["payerCpf", value.payerCpf],
+      ];
+      for (const [field, fieldValue] of payerFields) {
+        if (!fieldValue) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `${String(field)} é obrigatório para pagamento via Pix`,
+            path: [String(field)],
+          });
+        }
+      }
+    } else if (value.deliveryMethod === "HOME_DELIVERY") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Entrega a domicílio aceita apenas Pix",
+        path: ["paymentMethod"],
+      });
+    }
+
+    if (value.cashChangeFor !== undefined && value.paymentMethod !== "CASH") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Troco só vale para pagamento em dinheiro",
+        path: ["cashChangeFor"],
       });
     }
 
@@ -198,10 +251,10 @@ export const adminOrderMutationSchema = z
   .object({
     id: z.string().uuid().optional(),
     customerName: z.string().trim().min(2).max(120),
-    customerEmail: z.string().trim().email().max(180),
+    customerEmail: z.string().trim().email().max(180).optional(),
     deliveryMethod: deliveryMethodSchema,
     roomNumber: z.string().trim().max(20).optional(),
-    paymentMethod: z.literal("PIX").default("PIX"),
+    paymentMethod: paymentMethodSchema.default("PIX"),
     status: orderStatusSchema.default("PENDING"),
     totalAmount: z.coerce.number().min(0),
   })

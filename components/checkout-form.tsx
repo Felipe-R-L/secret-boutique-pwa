@@ -14,6 +14,8 @@ import {
   BedDouble,
   Home,
   Loader2,
+  CreditCard,
+  Banknote,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,10 +33,12 @@ import { cn } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart-store";
 import { initializeCheckout } from "@/lib/actions/checkout";
 import { HOME_DELIVERY_FEE } from "@/lib/schemas";
+import { useOrderHistoryStore } from "@/lib/store/order-history-store";
 import { fetchAddressByCep, formatCep } from "@/lib/viacep";
 import { track } from "@vercel/analytics";
 
 type DeliveryMethod = "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
+type PaymentMethod = "CARD" | "CASH" | "PIX";
 
 interface CheckoutFormProps {
   onSuccess: (orderId: string) => void;
@@ -49,13 +53,13 @@ const DELIVERY_OPTIONS: Array<{
   {
     method: "MOTEL_PICKUP",
     title: "Retirar na recepção",
-    description: "Retire o pedido na portaria.",
+    description: "Retire e pague na portaria.",
     icon: Store,
   },
   {
     method: "ROOM_DELIVERY",
     title: "Entrega no quarto",
-    description: "Levamos até o seu quarto.",
+    description: "Levamos até o seu quarto. Pague na entrega.",
     icon: BedDouble,
   },
   {
@@ -68,6 +72,39 @@ const DELIVERY_OPTIONS: Array<{
     icon: Home,
   },
 ];
+
+const PAYMENT_OPTIONS: Array<{
+  method: PaymentMethod;
+  title: string;
+  description: string;
+  icon: typeof Store;
+}> = [
+  {
+    method: "CARD",
+    title: "Cartão na entrega",
+    description: "Débito ou crédito na maquininha.",
+    icon: CreditCard,
+  },
+  {
+    method: "CASH",
+    title: "Dinheiro na entrega",
+    description: "Levamos troco se precisar.",
+    icon: Banknote,
+  },
+  {
+    method: "PIX",
+    title: "Pix agora",
+    description: "Pague online. Pede nome, CPF e e-mail.",
+    icon: QrCode,
+  },
+];
+
+function parseBrl(value: string): number | null {
+  const normalized = value.replace(/[^\d,]/g, "").replace(",", ".");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 function formatCpf(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -111,6 +148,11 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     }
   }, []);
 
+  // Dentro do motel o padrão é pagar na entrega, sem cadastro. Pix fica como
+  // opção (e é obrigatório na entrega a domicílio).
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CARD");
+  const [cashChangeFor, setCashChangeFor] = useState("");
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [cpf, setCpf] = useState("");
@@ -120,6 +162,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
   const [submitError, setSubmitError] = useState("");
 
   const { getTotal, clearCart, items } = useCartStore();
+  const addOrderToHistory = useOrderHistoryStore((s) => s.addOrder);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -131,6 +174,15 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
   const isHome = deliveryMethod === "HOME_DELIVERY";
   const isRoom = deliveryMethod === "ROOM_DELIVERY";
   const deliveryFee = isHome ? HOME_DELIVERY_FEE : 0;
+  const orderTotal = getTotal() + deliveryFee;
+  // Entrega a domicílio só aceita Pix.
+  const effectivePayment: PaymentMethod = isHome ? "PIX" : paymentMethod;
+  const isPix = effectivePayment === "PIX";
+  const cashChangeValue = parseBrl(cashChangeFor);
+  const cashChangeInvalid =
+    effectivePayment === "CASH" &&
+    cashChangeValue !== null &&
+    cashChangeValue < orderTotal;
   const cepDigitsOnly = cep.replace(/\D/g, "");
 
   const addressComplete =
@@ -151,12 +203,13 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
   const emailsMatch =
     customerEmail.length > 0 &&
     customerEmail.toLowerCase() === emailConfirmation.toLowerCase();
-  const canGoToStepThree =
+  const pixDataComplete =
     firstName.trim().length > 1 &&
     lastName.trim().length > 1 &&
     cpfDigits.length === 11 &&
     customerEmail.includes("@") &&
     emailsMatch;
+  const canGoToStepThree = isPix ? pixDataComplete : !cashChangeInvalid;
 
   const handleCepLookup = async (rawCep: string) => {
     setCepError("");
@@ -185,6 +238,15 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     return "Retirar na recepção";
   })();
 
+  const paymentLabel = (() => {
+    if (effectivePayment === "PIX") return "Pix (pagamento online)";
+    const where = isRoom ? "na entrega" : "na retirada";
+    if (effectivePayment === "CARD") return `Cartão ${where}`;
+    return cashChangeValue
+      ? `Dinheiro ${where} — troco para ${formatPrice(cashChangeValue)}`
+      : `Dinheiro ${where} — sem troco`;
+  })();
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitError("");
@@ -194,7 +256,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
       return;
     }
 
-    if (!emailsMatch) {
+    if (isPix && !emailsMatch) {
       setSubmitError("Os emails não coincidem.");
       return;
     }
@@ -202,8 +264,19 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     setIsSubmitting(true);
     track("begin_checkout", {
       items: items.length,
-      total: getTotal() + deliveryFee,
+      total: orderTotal,
+      payment: effectivePayment,
     });
+
+    const pixPayer = isPix
+      ? {
+          customerName: `${firstName.trim()} ${lastName.trim()}`,
+          customerEmail: customerEmail.trim(),
+          payerFirstName: firstName.trim(),
+          payerLastName: lastName.trim(),
+          payerCpf: cpfDigits,
+        }
+      : {};
 
     const result = await initializeCheckout({
       deliveryMethod,
@@ -215,12 +288,12 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
       deliveryNeighborhood: isHome ? neighborhood.trim() : undefined,
       deliveryCity: isHome ? city.trim() : undefined,
       deliveryState: isHome ? uf.trim().toUpperCase() : undefined,
-      customerName: `${firstName.trim()} ${lastName.trim()}`,
-      customerEmail: customerEmail.trim(),
-      payerFirstName: firstName.trim(),
-      payerLastName: lastName.trim(),
-      payerCpf: cpfDigits,
-      paymentMethod: "PIX",
+      ...pixPayer,
+      paymentMethod: effectivePayment,
+      cashChangeFor:
+        effectivePayment === "CASH" && cashChangeValue
+          ? cashChangeValue
+          : undefined,
       items: items.map((item) => ({
         productId: item.product.id,
         variantId: item.variant?.id,
@@ -232,6 +305,25 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
     if (!result.ok) {
       setSubmitError(result.error);
+      return;
+    }
+
+    if (!isPix) {
+      // Sem pagamento online: o pedido já está com a recepção.
+      addOrderToHistory({
+        orderId: result.orderId,
+        pickupCode: result.pickupCode,
+        email: "",
+        total: result.totalAmount,
+        date: new Date().toISOString(),
+        status: "PENDING",
+        paymentMethod: result.paymentMethod,
+        deliveryMethod,
+        roomNumber: isRoom ? roomNumber.trim() : null,
+      });
+      clearCart();
+      onSuccess(result.orderId);
+      router.push(`/checkout/success?orderId=${result.orderId}`);
       return;
     }
 
@@ -562,119 +654,224 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
       {step === 2 && (
         <div className="space-y-4">
-          <h3 className="font-medium text-foreground">
-            2. Dados para Pagamento
-          </h3>
+          <h3 className="font-medium text-foreground">2. Pagamento</h3>
 
-          {/* CPF/Name disclaimer */}
-          <div className="flex items-start gap-3 rounded-xl bg-pastel-lavender/15 p-3">
-            <Shield className="mt-0.5 size-4 shrink-0 text-primary/60" />
-            <p
-              className="text-xs leading-relaxed text-muted-foreground"
-              style={{ fontFamily: "Inter, sans-serif" }}
-            >
-              O CPF e nome completo são exigidos pelo{" "}
-              <strong>Banco Central</strong> para pagamentos via Pix.{" "}
-              <strong>Não armazenamos</strong> essas informações — elas são
-              enviadas diretamente ao processador de pagamento.
+          {isHome ? (
+            <p className="rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground">
+              Entregas a domicílio são pagas online, via Pix.
             </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <label
-                htmlFor="first-name"
-                className="text-sm text-muted-foreground"
-              >
-                Nome
-              </label>
-              <Input
-                id="first-name"
-                type="text"
-                placeholder="Seu nome"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="h-12 rounded-xl"
-              />
+          ) : (
+            <div className="space-y-3">
+              {PAYMENT_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const selected = paymentMethod === option.method;
+                const description =
+                  option.method === "PIX"
+                    ? option.description
+                    : `${option.description} ${isRoom ? "Na porta do quarto." : "Na recepção."}`;
+                return (
+                  <button
+                    key={option.method}
+                    type="button"
+                    onClick={() => setPaymentMethod(option.method)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-xl border p-4 text-left transition",
+                      selected
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border bg-card hover:border-primary/40",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex size-10 items-center justify-center rounded-full",
+                        selected
+                          ? "bg-primary/15 text-primary"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      <Icon className="size-5" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {option.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {description}
+                      </p>
+                    </div>
+                    <div
+                      className={cn(
+                        "size-4 rounded-full border-2",
+                        selected
+                          ? "border-primary bg-primary"
+                          : "border-muted-foreground/40",
+                      )}
+                    />
+                  </button>
+                );
+              })}
             </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="last-name"
-                className="text-sm text-muted-foreground"
+          )}
+
+          {!isPix && (
+            <div className="flex items-start gap-3 rounded-xl bg-pastel-lavender/15 p-3">
+              <Shield className="mt-0.5 size-4 shrink-0 text-primary/60" />
+              <p
+                className="text-xs leading-relaxed text-muted-foreground"
+                style={{ fontFamily: "Inter, sans-serif" }}
               >
-                Sobrenome
-              </label>
-              <Input
-                id="last-name"
-                type="text"
-                placeholder="Seu sobrenome"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="h-12 rounded-xl"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="cpf" className="text-sm text-muted-foreground">
-              CPF
-            </label>
-            <Input
-              id="cpf"
-              type="text"
-              inputMode="numeric"
-              placeholder="000.000.000-00"
-              value={cpf}
-              onChange={(e) => setCpf(formatCpf(e.target.value))}
-              className="h-12 rounded-xl"
-              maxLength={14}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label
-              htmlFor="customer-email"
-              className="text-sm text-muted-foreground"
-            >
-              Email
-            </label>
-            <Input
-              id="customer-email"
-              type="email"
-              placeholder="voce@email.com"
-              value={customerEmail}
-              onChange={(e) => setCustomerEmail(e.target.value)}
-              className="h-12 rounded-xl"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label
-              htmlFor="email-confirm"
-              className="text-sm text-muted-foreground"
-            >
-              Confirme o email
-            </label>
-            <Input
-              id="email-confirm"
-              type="email"
-              placeholder="Repita seu email"
-              value={emailConfirmation}
-              onChange={(e) => setEmailConfirmation(e.target.value)}
-              className={cn(
-                "h-12 rounded-xl",
-                emailConfirmation.length > 0 &&
-                  !emailsMatch &&
-                  "border-destructive ring-destructive/20",
-              )}
-            />
-            {emailConfirmation.length > 0 && !emailsMatch && (
-              <p className="flex items-center gap-1 text-xs text-destructive">
-                <AlertCircle className="size-3" />
-                Os emails não coincidem
+                <strong>Sem cadastro.</strong> Não pedimos nome, CPF nem e-mail
+                — você só paga quando receber o pedido, em embalagem discreta.
               </p>
-            )}
-          </div>
+            </div>
+          )}
+
+          {effectivePayment === "CASH" && (
+            <div className="space-y-2">
+              <label
+                htmlFor="cash-change"
+                className="text-sm text-muted-foreground"
+              >
+                Troco para quanto? (opcional)
+              </label>
+              <Input
+                id="cash-change"
+                type="text"
+                inputMode="decimal"
+                placeholder={`Ex.: ${formatPrice(Math.ceil(orderTotal / 50) * 50 || 50)}`}
+                value={cashChangeFor}
+                onChange={(e) => setCashChangeFor(e.target.value)}
+                className={cn(
+                  "h-12 rounded-xl",
+                  cashChangeInvalid && "border-destructive ring-destructive/20",
+                )}
+              />
+              {cashChangeInvalid ? (
+                <p className="flex items-center gap-1 text-xs text-destructive">
+                  <AlertCircle className="size-3" />O valor precisa ser maior
+                  que o total ({formatPrice(orderTotal)}).
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Deixe em branco se for pagar o valor exato.
+                </p>
+              )}
+            </div>
+          )}
+
+          {isPix && (
+            <>
+              {/* CPF/Name disclaimer */}
+              <div className="flex items-start gap-3 rounded-xl bg-pastel-lavender/15 p-3">
+                <Shield className="mt-0.5 size-4 shrink-0 text-primary/60" />
+                <p
+                  className="text-xs leading-relaxed text-muted-foreground"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  O CPF e nome completo são exigidos pelo{" "}
+                  <strong>Banco Central</strong> para pagamentos via Pix.{" "}
+                  <strong>Não armazenamos</strong> essas informações — elas são
+                  enviadas diretamente ao processador de pagamento.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="first-name"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Nome
+                  </label>
+                  <Input
+                    id="first-name"
+                    type="text"
+                    placeholder="Seu nome"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="h-12 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="last-name"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Sobrenome
+                  </label>
+                  <Input
+                    id="last-name"
+                    type="text"
+                    placeholder="Seu sobrenome"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="h-12 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="cpf" className="text-sm text-muted-foreground">
+                  CPF
+                </label>
+                <Input
+                  id="cpf"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                  value={cpf}
+                  onChange={(e) => setCpf(formatCpf(e.target.value))}
+                  className="h-12 rounded-xl"
+                  maxLength={14}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="customer-email"
+                  className="text-sm text-muted-foreground"
+                >
+                  Email
+                </label>
+                <Input
+                  id="customer-email"
+                  type="email"
+                  placeholder="voce@email.com"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  className="h-12 rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="email-confirm"
+                  className="text-sm text-muted-foreground"
+                >
+                  Confirme o email
+                </label>
+                <Input
+                  id="email-confirm"
+                  type="email"
+                  placeholder="Repita seu email"
+                  value={emailConfirmation}
+                  onChange={(e) => setEmailConfirmation(e.target.value)}
+                  className={cn(
+                    "h-12 rounded-xl",
+                    emailConfirmation.length > 0 &&
+                      !emailsMatch &&
+                      "border-destructive ring-destructive/20",
+                  )}
+                />
+                {emailConfirmation.length > 0 && !emailsMatch && (
+                  <p className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="size-3" />
+                    Os emails não coincidem
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <Button
@@ -699,15 +896,27 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
       {step === 3 && (
         <div className="space-y-4">
-          <h3 className="font-medium text-foreground">3. Pagamento</h3>
+          <h3 className="font-medium text-foreground">3. Confirmar pedido</h3>
 
           <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
             <div className="flex items-center gap-3">
-              <QrCode className="size-6 text-primary" />
+              {effectivePayment === "PIX" ? (
+                <QrCode className="size-6 text-primary" />
+              ) : effectivePayment === "CARD" ? (
+                <CreditCard className="size-6 text-primary" />
+              ) : (
+                <Banknote className="size-6 text-primary" />
+              )}
               <div>
-                <p className="text-sm font-medium text-primary">PIX (fixo)</p>
+                <p className="text-sm font-medium text-primary">
+                  {paymentLabel}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  O QR Code será gerado na etapa de pagamento.
+                  {isPix
+                    ? "O QR Code será gerado na etapa de pagamento."
+                    : isRoom
+                      ? "Você paga quando o pedido chegar ao quarto."
+                      : "Você paga quando retirar o pedido na recepção."}
                 </p>
               </div>
             </div>
@@ -724,10 +933,14 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
                 CEP {cep.trim()}
               </p>
             )}
-            <p className="mt-1 font-medium">
-              Cliente: {firstName.trim()} {lastName.trim()}
-            </p>
-            <p className="font-medium">Email: {customerEmail.trim()}</p>
+            {isPix && (
+              <>
+                <p className="mt-1 font-medium">
+                  Cliente: {firstName.trim()} {lastName.trim()}
+                </p>
+                <p className="font-medium">Email: {customerEmail.trim()}</p>
+              </>
+            )}
           </div>
 
           {submitError && (
@@ -749,7 +962,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
             </div>
             <div className="flex items-center justify-between text-lg font-semibold">
               <span>Total</span>
-              <span>{formatPrice(getTotal() + deliveryFee)}</span>
+              <span>{formatPrice(orderTotal)}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -773,7 +986,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
                 ) : (
                   <>
                     <CheckCircle className="size-5" />
-                    Finalizar Pedido
+                    {isPix ? "Finalizar Pedido" : "Confirmar Pedido"}
                   </>
                 )}
               </Button>

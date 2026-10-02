@@ -14,10 +14,17 @@ import {
   Store,
   BedDouble,
   X,
+  CreditCard,
+  Banknote,
+  HandCoins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createReceptionOrder, markReceptionOrderPaid } from "@/lib/actions/reception";
+import {
+  createReceptionOrder,
+  confirmInPersonPayment,
+} from "@/lib/actions/reception";
+import { cashChangeDue, describeInPersonPayment } from "@/lib/payment-labels";
 import { generatePixOrder, checkOrderStatus } from "@/lib/actions/checkout";
 
 type VariantOption = {
@@ -50,7 +57,16 @@ type CartLine = {
 };
 
 type DeliveryMethod = "MOTEL_PICKUP" | "ROOM_DELIVERY";
-type Phase = "building" | "paying" | "paid";
+type PaymentMethod = "PIX" | "CARD" | "CASH";
+// registered: pedido de cartão/dinheiro para o quarto, a cobrar na entrega.
+type Phase = "building" | "paying" | "paid" | "registered";
+
+function parseBrl(value: string): number | null {
+  const normalized = value.replace(/[^\d,]/g, "").replace(",", ".");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -72,6 +88,8 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     useState<DeliveryMethod>("MOTEL_PICKUP");
   const [roomNumber, setRoomNumber] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CARD");
+  const [cashChangeFor, setCashChangeFor] = useState("");
 
   const [phase, setPhase] = useState<Phase>("building");
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -166,6 +184,8 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     setDeliveryMethod("MOTEL_PICKUP");
     setRoomNumber("");
     setCustomerName("");
+    setPaymentMethod("CARD");
+    setCashChangeFor("");
     setPhase("building");
     setOrderId(null);
     setQrCodeBase64(null);
@@ -191,30 +211,74 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     }, 3000);
   };
 
-  const handleGenerate = async () => {
-    setError("");
+  const cashChangeValue = parseBrl(cashChangeFor);
+  const cashChangeInvalid =
+    paymentMethod === "CASH" &&
+    cashChangeValue !== null &&
+    cashChangeValue < total;
+  const changeDue =
+    paymentMethod === "CASH" ? cashChangeDue(cashChangeValue, total) : null;
+
+  const validateSale = () => {
     if (cart.length === 0) {
       setError("Adicione ao menos um produto.");
-      return;
+      return false;
     }
     if (deliveryMethod === "ROOM_DELIVERY" && roomNumber.trim().length === 0) {
       setError("Informe o número do quarto.");
+      return false;
+    }
+    if (cashChangeInvalid) {
+      setError("O valor para troco precisa ser maior que o total.");
+      return false;
+    }
+    return true;
+  };
+
+  const buildOrderInput = (settleNow: boolean) => ({
+    items: cart.map((line) => ({
+      productId: line.productId,
+      variantId: line.variantId,
+      quantity: line.quantity,
+    })),
+    deliveryMethod,
+    roomNumber:
+      deliveryMethod === "ROOM_DELIVERY" ? roomNumber.trim() : undefined,
+    customerName: customerName.trim() || undefined,
+    paymentMethod,
+    cashChangeFor:
+      paymentMethod === "CASH" && cashChangeValue ? cashChangeValue : undefined,
+    settleNow,
+  });
+
+  // Cartão/dinheiro: no balcão o valor já foi recebido e a venda fecha agora;
+  // para o quarto, o pedido fica "a cobrar na entrega" no painel de pedidos.
+  const handleInPersonSale = async () => {
+    setError("");
+    if (!validateSale()) return;
+
+    const settleNow = deliveryMethod === "MOTEL_PICKUP";
+    setIsSubmitting(true);
+    const created = await createReceptionOrder(buildOrderInput(settleNow));
+    setIsSubmitting(false);
+
+    if (!created.ok) {
+      setError(created.error);
       return;
     }
 
+    setOrderId(created.orderId);
+    setPickupCode(created.pickupCode);
+    setPhase(settleNow ? "paid" : "registered");
+  };
+
+  const handleGenerate = async () => {
+    setError("");
+    if (!validateSale()) return;
+
     setIsSubmitting(true);
 
-    const created = await createReceptionOrder({
-      items: cart.map((line) => ({
-        productId: line.productId,
-        variantId: line.variantId,
-        quantity: line.quantity,
-      })),
-      deliveryMethod,
-      roomNumber:
-        deliveryMethod === "ROOM_DELIVERY" ? roomNumber.trim() : undefined,
-      customerName: customerName.trim() || undefined,
-    });
+    const created = await createReceptionOrder(buildOrderInput(false));
 
     if (!created.ok) {
       setIsSubmitting(false);
@@ -242,11 +306,17 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     startPolling(created.orderId);
   };
 
-  const handleMarkPaid = async () => {
+  // Cobrança Pix que o cliente acabou pagando na maquininha ou em dinheiro.
+  const handleMarkPaid = async (method: "CARD" | "CASH") => {
     if (!orderId) return;
     setIsConfirming(true);
     setError("");
-    const result = await markReceptionOrderPaid(orderId);
+    const result = await confirmInPersonPayment({
+      orderId,
+      method,
+      // No balcão o cliente leva na hora; no quarto segue o fluxo de entrega.
+      complete: deliveryMethod === "MOTEL_PICKUP",
+    });
     setIsConfirming(false);
     if (!result.ok) {
       setError(result.error);
@@ -275,7 +345,9 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
         </div>
         <h3 className="text-xl font-semibold text-green-800">Pagamento confirmado</h3>
         <p className="text-sm text-green-700">
-          Pode entregar o pedido ao cliente.
+          {deliveryMethod === "ROOM_DELIVERY"
+            ? `Prepare o pedido e leve ao quarto ${roomNumber.trim()}.`
+            : "Pode entregar o pedido ao cliente."}
         </p>
         {pickupCode && (
           <div className="rounded-xl border border-green-200 bg-white p-3">
@@ -285,6 +357,40 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
             </p>
           </div>
         )}
+        <Button className="w-full rounded-xl" onClick={resetSale}>
+          Nova venda
+        </Button>
+      </div>
+    );
+  }
+
+  // ---- REGISTERED (cobrar na entrega) ----
+  if (phase === "registered") {
+    return (
+      <div className="mx-auto max-w-md space-y-4 rounded-2xl border border-purple-200 bg-purple-50 p-8 text-center">
+        <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-purple-100">
+          <HandCoins className="size-9 text-purple-700" />
+        </div>
+        <h3 className="text-xl font-semibold text-purple-900">
+          Pedido registrado — quarto {roomNumber.trim()}
+        </h3>
+        <div className="rounded-xl border border-purple-200 bg-white p-3">
+          <p className="text-xs text-muted-foreground">Cobrar na entrega</p>
+          <p className="text-2xl font-bold text-foreground">
+            {formatPrice(total)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {describeInPersonPayment(paymentMethod, cashChangeValue)}
+          </p>
+          {changeDue && (
+            <p className="mt-1 text-sm font-medium text-purple-800">
+              Levar {formatPrice(changeDue)} de troco
+            </p>
+          )}
+        </div>
+        <p className="text-sm text-purple-800">
+          Ao entregar, confirme o recebimento em Pedidos → A cobrar.
+        </p>
         <Button className="w-full rounded-xl" onClick={resetSale}>
           Nova venda
         </Button>
@@ -370,17 +476,31 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
         )}
 
         <div className="grid grid-cols-1 gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            className="rounded-xl"
-            onClick={handleMarkPaid}
-            disabled={isConfirming}
-          >
-            {isConfirming
-              ? "Confirmando..."
-              : "Recebi por fora (cartão/dinheiro)"}
-          </Button>
+          <p className="pt-1 text-center text-xs text-muted-foreground">
+            Cliente pagou de outro jeito?
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-xl"
+              onClick={() => handleMarkPaid("CARD")}
+              disabled={isConfirming}
+            >
+              <CreditCard className="mr-1 size-4" />
+              {isConfirming ? "..." : "Recebi no cartão"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-xl"
+              onClick={() => handleMarkPaid("CASH")}
+              disabled={isConfirming}
+            >
+              <Banknote className="mr-1 size-4" />
+              {isConfirming ? "..." : "Recebi em dinheiro"}
+            </Button>
+          </div>
           <Button
             type="button"
             variant="ghost"
@@ -563,6 +683,52 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
           />
         </div>
 
+        {/* Pagamento */}
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-xs font-medium text-muted-foreground">Pagamento</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                { method: "CARD", label: "Cartão", icon: CreditCard },
+                { method: "CASH", label: "Dinheiro", icon: Banknote },
+                { method: "PIX", label: "Pix", icon: QrCode },
+              ] as const
+            ).map((option) => {
+              const Icon = option.icon;
+              return (
+                <button
+                  key={option.method}
+                  type="button"
+                  onClick={() => setPaymentMethod(option.method)}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg border p-2 text-xs ${
+                    paymentMethod === option.method
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border"
+                  }`}
+                >
+                  <Icon className="size-4" /> {option.label}
+                </button>
+              );
+            })}
+          </div>
+          {paymentMethod === "CASH" && (
+            <>
+              <Input
+                value={cashChangeFor}
+                onChange={(e) => setCashChangeFor(e.target.value)}
+                inputMode="decimal"
+                placeholder="Troco para quanto? (opcional)"
+                className="h-10 rounded-lg"
+              />
+              {changeDue && (
+                <p className="text-xs text-muted-foreground">
+                  Troco: {formatPrice(changeDue)}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+
         <div className="flex items-center justify-between border-t border-border pt-3 text-lg font-semibold">
           <span>Total</span>
           <span>{formatPrice(total)}</span>
@@ -574,14 +740,29 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
           </p>
         )}
 
-        <Button
-          type="button"
-          className="w-full rounded-xl"
-          onClick={handleGenerate}
-          disabled={isSubmitting || cart.length === 0}
-        >
-          {isSubmitting ? "Gerando..." : "Gerar cobrança Pix"}
-        </Button>
+        {paymentMethod === "PIX" ? (
+          <Button
+            type="button"
+            className="w-full rounded-xl"
+            onClick={handleGenerate}
+            disabled={isSubmitting || cart.length === 0}
+          >
+            {isSubmitting ? "Gerando..." : "Gerar cobrança Pix"}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            className="w-full rounded-xl"
+            onClick={handleInPersonSale}
+            disabled={isSubmitting || cart.length === 0}
+          >
+            {isSubmitting
+              ? "Registrando..."
+              : deliveryMethod === "MOTEL_PICKUP"
+                ? `Recebi ${formatPrice(total)} — finalizar venda`
+                : "Registrar pedido — cobrar na entrega"}
+          </Button>
+        )}
       </section>
 
       {/* Seletor de variante */}

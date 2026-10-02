@@ -18,7 +18,7 @@ export async function GET(
   const { data: order, error } = await supabase
     .from('orders')
     .select(
-      'id,status,pickup_code,total_amount,created_at,updated_at,completed_at',
+      'id,status,pickup_code,total_amount,created_at,updated_at,completed_at,delivery_method,room_number,payment_method,cash_change_for',
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -40,6 +40,11 @@ export async function GET(
       createdAt: order.created_at,
       updatedAt: order.updated_at,
       completedAt: order.completed_at,
+      deliveryMethod: order.delivery_method,
+      roomNumber: order.room_number,
+      paymentMethod: order.payment_method,
+      cashChangeFor:
+        order.cash_change_for === null ? null : Number(order.cash_change_for),
     },
   });
 }

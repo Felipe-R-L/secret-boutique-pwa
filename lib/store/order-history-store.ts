@@ -8,6 +8,10 @@ type SavedOrder = {
   total: number;
   date: string; // ISO string
   status?: string;
+  // Pagamento na entrega (cartão/dinheiro) — muda o texto do status pendente.
+  paymentMethod?: string;
+  deliveryMethod?: string;
+  roomNumber?: string | null;
 };
 
 type OrderHistoryState = {

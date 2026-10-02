@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminContext } from "@/lib/auth/admin";
 import { logAudit } from "@/lib/audit/log";
-import { adminOrderMutationSchema, orderStatusSchema } from "@/lib/schemas";
+import {
+  adminOrderMutationSchema,
+  isInPersonPayment,
+  orderStatusSchema,
+} from "@/lib/schemas";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   sendReadyForPickupEmail,
@@ -29,7 +33,7 @@ function normalizeOrderPayload(
 ) {
   return {
     customer_name: input.customerName,
-    customer_email: input.customerEmail,
+    customer_email: input.customerEmail ?? null,
     delivery_method: input.deliveryMethod,
     room_number:
       input.deliveryMethod === "ROOM_DELIVERY"
@@ -144,7 +148,7 @@ export async function updateOrderStatus(input: unknown) {
   // Fetch current order to validate transition
   const { data: currentOrder } = await supabase
     .from("orders")
-    .select("id,status,delivery_method")
+    .select("id,status,delivery_method,payment_method")
     .eq("id", parsed.data.id)
     .maybeSingle();
 
@@ -154,10 +158,20 @@ export async function updateOrderStatus(input: unknown) {
 
   const newStatus = parsed.data.status;
 
-  // Cancelar pedido é exclusivo do ADMIN (papel "master"). STAFF nunca cancela,
-  // independentemente do status de origem — guard explícito, além de o cancelamento
-  // não constar na tabela de transições permitidas do STAFF abaixo.
-  if (newStatus === "CANCELLED" && context.role !== "ADMIN") {
+  // Pedido "pagar na entrega" ainda não pago: nenhum dinheiro entrou nem saiu
+  // estoque, então a recepção pode cancelar (hóspede desistiu, quarto vazio).
+  const isUnpaidInPerson =
+    currentOrder.status === "PENDING" &&
+    isInPersonPayment(currentOrder.payment_method);
+
+  // Fora esse caso, cancelar pedido é exclusivo do ADMIN (papel "master") —
+  // guard explícito, além de o cancelamento não constar na tabela de
+  // transições permitidas do STAFF abaixo.
+  if (
+    newStatus === "CANCELLED" &&
+    context.role !== "ADMIN" &&
+    !isUnpaidInPerson
+  ) {
     return {
       ok: false as const,
       error: "Apenas o administrador pode cancelar pedidos.",
@@ -167,6 +181,7 @@ export async function updateOrderStatus(input: unknown) {
   // Staff can only do specific transitions
   if (context.role === "STAFF") {
     const validTransitions: Record<string, string[]> = {
+      ...(isUnpaidInPerson ? { PENDING: ["CANCELLED"] } : {}),
       PAID: ["PREPARING"],
       PREPARING: ["READY_FOR_PICKUP"],
       // Entrega no quarto dispensa o código de retirada: o funcionário

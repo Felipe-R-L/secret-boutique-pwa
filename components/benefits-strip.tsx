@@ -1,4 +1,4 @@
-import { EyeOff, Package, QrCode } from "lucide-react";
+import { EyeOff, Package, CreditCard } from "lucide-react";
 
 const benefits = [
   {
@@ -14,9 +14,9 @@ const benefits = [
     iconBg: "bg-pastel-rose/30",
   },
   {
-    icon: QrCode,
-    title: "Pagamento via PIX",
-    description: "Aprovação na hora, sem cartão de crédito.",
+    icon: CreditCard,
+    title: "Pague na entrega",
+    description: "Cartão ou dinheiro no quarto — ou Pix na hora.",
     iconBg: "bg-pastel-sage/30",
   },
 ];

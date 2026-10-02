@@ -193,7 +193,7 @@ export async function POST(request: Request) {
   const { data: order, error: orderLookupError } = await supabase
     .from('orders')
     .select(
-      'id,status,pickup_code,customer_name,total_amount,delivery_method,room_number',
+      'id,status,pickup_code,customer_name,total_amount,delivery_method,room_number,payment_method',
     )
     .eq('mercadopago_order_id', mpOrderId)
     .maybeSingle();
@@ -208,6 +208,18 @@ export async function POST(request: Request) {
 
   if (order.status === mappedStatus) {
     return NextResponse.json({ ok: true, idempotent: true });
+  }
+
+  // O Pix só decide pedidos que ainda aguardam pagamento. Se a recepção já
+  // recebeu no cartão/dinheiro (payment_method mudou) ou o pedido já andou no
+  // fluxo, um aviso atrasado — QR expirado, reenvio do webhook — não pode
+  // voltar o status nem baixar o estoque de novo.
+  if (order.payment_method !== 'PIX' || order.status !== 'PENDING') {
+    return NextResponse.json({
+      ok: true,
+      ignored: true,
+      reason: 'Order no longer awaiting Pix',
+    });
   }
 
   // Generate pickup code if transitioning to PAID and none exists

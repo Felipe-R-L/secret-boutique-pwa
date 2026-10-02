@@ -40,9 +40,10 @@ export default async function AdminReceptionPage() {
       <div className="space-y-2">
         <h2 className="text-xl font-semibold">Venda pela Recepção</h2>
         <p className="text-sm text-muted-foreground">
-          Monte o pedido, gere o QR Pix (ou copia e cola) na tela e acompanhe o
-          pagamento em tempo real. Cartão/dinheiro pela maquininha: confirme
-          manualmente após receber.
+          Para vendas no balcão e hóspedes que pedem pelo telefone do quarto.
+          Cartão ou dinheiro no balcão fecham a venda na hora; para o quarto, o
+          pedido fica &quot;a cobrar na entrega&quot; em Pedidos. Pix gera o QR na tela e
+          confirma sozinho.
         </p>
       </div>
 

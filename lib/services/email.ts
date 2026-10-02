@@ -32,6 +32,9 @@ export async function sendVoucherEmail(orderId: string) {
     throw new Error(error?.message ?? 'Order not found');
   }
 
+  // Pedido presencial ou lançado pela recepção não tem email.
+  if (!order.customer_email) return;
+
   if (order.status !== 'PAID') {
     throw new Error('Order is not paid');
   }
@@ -76,6 +79,9 @@ export async function sendReadyForPickupEmail(orderId: string) {
     throw new Error(error?.message ?? 'Order not found');
   }
 
+  // Pedido presencial ou lançado pela recepção não tem email.
+  if (!order.customer_email) return;
+
   const html = await render(
     ReadyForPickupEmail({
       customerName: order.customer_name,
@@ -112,6 +118,9 @@ export async function sendOrderCompletedEmail(orderId: string) {
   if (error || !order) {
     throw new Error(error?.message ?? 'Order not found');
   }
+
+  // Pedido presencial ou lançado pela recepção não tem email.
+  if (!order.customer_email) return;
 
   const html = await render(
     OrderCompletedEmail({

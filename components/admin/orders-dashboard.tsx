@@ -9,6 +9,9 @@ import {
   Bell,
   Search,
   Trash2,
+  CreditCard,
+  Banknote,
+  HandCoins,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,6 +32,12 @@ import {
   completeOrderByPickupCode,
   deleteOrderByAdmin,
 } from "@/lib/actions/orders";
+import { confirmInPersonPayment } from "@/lib/actions/reception";
+import {
+  cashChangeDue,
+  describeInPersonPayment,
+  PAYMENT_METHOD_LABELS,
+} from "@/lib/payment-labels";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 import { OrderItemsButton } from "@/components/admin/order-items-modal";
 import { playNotificationSound } from "@/lib/sound";
@@ -36,7 +45,7 @@ import { playNotificationSound } from "@/lib/sound";
 type Order = {
   id: string;
   customer_name: string;
-  customer_email: string;
+  customer_email: string | null;
   delivery_method: string;
   room_number: string | null;
   delivery_fee?: number | null;
@@ -48,11 +57,36 @@ type Order = {
   delivery_city?: string | null;
   delivery_state?: string | null;
   status: OrderStatus;
+  payment_method?: string | null;
+  cash_change_for?: number | null;
+  channel?: string | null;
   total_amount: number;
   pickup_code: string | null;
   created_at: string;
   updated_at: string;
 };
+
+// Pedido "pagar na entrega" (cartão/dinheiro) que ainda não foi cobrado.
+function isAwaitingInPersonPayment(order: Order): boolean {
+  return (
+    order.status === "PENDING" &&
+    (order.payment_method === "CARD" || order.payment_method === "CASH")
+  );
+}
+
+function paymentSummary(order: Order): string {
+  const method = order.payment_method ?? "PIX";
+  if (method === "PIX") return PAYMENT_METHOD_LABELS.PIX;
+  const label = describeInPersonPayment(method, order.cash_change_for);
+  const change = cashChangeDue(order.cash_change_for, order.total_amount);
+  if (method === "CASH" && change && order.status === "PENDING") {
+    return `${label} (levar ${new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(change)} de troco)`;
+  }
+  return label;
+}
 
 function deliveryShortLabel(order: Order): string {
   if (order.delivery_method === "MOTEL_PICKUP") return "Portaria";
@@ -123,7 +157,11 @@ const statusConfig: Record<
 // cancelamento (status === "CANCELLED"); `delete` remove o pedido em definitivo.
 type ConfirmAction =
   | { kind: "status"; orderId: string; newStatus: OrderStatus }
-  | { kind: "delete"; orderId: string };
+  | { kind: "delete"; orderId: string }
+  | { kind: "settle"; orderId: string; method: "CARD" | "CASH" };
+
+// "A cobrar" não é um status do banco: são os PENDING com pagamento presencial.
+type OrderFilter = OrderStatus | "ALL" | "TO_COLLECT";
 
 interface OrdersDashboardProps {
   initialOrders: Order[];
@@ -140,7 +178,7 @@ export function OrdersDashboard({
   const [completionSuccess, setCompletionSuccess] = useState("");
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
   const [newOrderAlert, setNewOrderAlert] = useState(false);
-  const [filter, setFilter] = useState<OrderStatus | "ALL">("ALL");
+  const [filter, setFilter] = useState<OrderFilter>("ALL");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   // Alerta visual + som quando um novo pedido pago chega e o ADMIN/STAFF está
@@ -166,7 +204,14 @@ export function OrdersDashboard({
           if (payload.eventType === "INSERT") {
             const newOrder = payload.new as Order;
             setOrders((prev) => [newOrder, ...prev]);
-            if (newOrder.status === "PAID") {
+            // Pix chega como PAID pelo webhook; "pagar na entrega" chega
+            // pendente e precisa de atenção na hora. Pedido lançado pela
+            // própria recepção não toca.
+            if (
+              newOrder.status === "PAID" ||
+              (isAwaitingInPersonPayment(newOrder) &&
+                newOrder.channel !== "RECEPTION")
+            ) {
               notifyNewOrder();
             }
           } else if (payload.eventType === "UPDATE") {
@@ -254,11 +299,52 @@ export function OrdersDashboard({
     }
   };
 
+  const handleSettle = async (orderId: string, method: "CARD" | "CASH") => {
+    setLoading(orderId, true);
+    const result = await confirmInPersonPayment({
+      orderId,
+      method,
+      complete: true,
+    });
+    if (!result.ok) {
+      toast.error("Não foi possível confirmar o pagamento", {
+        description: result.error,
+      });
+    } else {
+      // O realtime também atualiza; aqui só evita o atraso na tela.
+      const now = new Date().toISOString();
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: result.status,
+                payment_method: method,
+                updated_at: now,
+              }
+            : o,
+        ),
+      );
+      toast.success(
+        method === "CARD"
+          ? "Pago no cartão — pedido finalizado"
+          : "Pago em dinheiro — pedido finalizado",
+      );
+    }
+    setLoading(orderId, false);
+  };
+
   const handleDelete = async (orderId: string) => {
     setLoading(orderId, true);
     await deleteOrderByAdmin({ id: orderId });
     setLoading(orderId, false);
   };
+
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(price);
 
   // Executa a ação pendente depois que o admin confirma no modal.
   const runConfirmedAction = async () => {
@@ -267,6 +353,8 @@ export function OrdersDashboard({
     setConfirmAction(null);
     if (action.kind === "delete") {
       await handleDelete(action.orderId);
+    } else if (action.kind === "settle") {
+      await handleSettle(action.orderId, action.method);
     } else {
       await handleStatusUpdate(action.orderId, action.newStatus);
     }
@@ -279,11 +367,36 @@ export function OrdersDashboard({
     const order = orders.find((o) => o.id === confirmAction.orderId);
     const who = order?.customer_name ?? "o cliente";
 
+    if (confirmAction.kind === "settle") {
+      const total = order ? formatPrice(Number(order.total_amount)) : "";
+      const how =
+        confirmAction.method === "CARD" ? "no cartão" : "em dinheiro";
+      return {
+        title: `Recebeu ${total} ${how}?`,
+        description: `O pedido de ${who} será marcado como pago ${how} e finalizado, e o estoque dos produtos será baixado.`,
+        confirmLabel: "Confirmar recebimento",
+        destructive: false,
+      };
+    }
+
     if (confirmAction.kind === "delete") {
       return {
         title: "Excluir pedido?",
         description: `O pedido de ${who} será removido permanentemente do sistema. Esta ação não pode ser desfeita e não estorna o pagamento — faça o reembolso no painel do Mercado Pago, se necessário.`,
         confirmLabel: "Excluir pedido",
+        destructive: true,
+      };
+    }
+
+    if (
+      confirmAction.newStatus === "CANCELLED" &&
+      order &&
+      isAwaitingInPersonPayment(order)
+    ) {
+      return {
+        title: "Cancelar pedido?",
+        description: `O pedido de ${who} ainda não foi pago nem saiu do estoque. Ele será marcado como Cancelado.`,
+        confirmLabel: "Cancelar pedido",
         destructive: true,
       };
     }
@@ -307,18 +420,18 @@ export function OrdersDashboard({
     };
   })();
 
+  const toCollectCount = orders.filter(isAwaitingInPersonPayment).length;
+
   const filteredOrders =
-    filter === "ALL" ? orders : orders.filter((o) => o.status === filter);
+    filter === "ALL"
+      ? orders
+      : filter === "TO_COLLECT"
+        ? orders.filter(isAwaitingInPersonPayment)
+        : orders.filter((o) => o.status === filter);
 
   const activeOrders = orders.filter(
     (o) => !["COMPLETED", "CANCELLED", "EXPIRED"].includes(o.status),
   );
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
 
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleString("pt-BR", {
@@ -331,7 +444,11 @@ export function OrdersDashboard({
   return (
     <div className="space-y-6">
       {/* Header stats */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+          <p className="text-2xl font-bold text-purple-800">{toCollectCount}</p>
+          <p className="text-xs text-purple-600">A cobrar</p>
+        </div>
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
           <p className="text-2xl font-bold text-blue-800">
             {orders.filter((o) => o.status === "PAID").length}
@@ -413,6 +530,7 @@ export function OrdersDashboard({
         {(
           [
             "ALL",
+            "TO_COLLECT",
             "PAID",
             "PREPARING",
             "READY_FOR_PICKUP",
@@ -430,7 +548,9 @@ export function OrdersDashboard({
           >
             {s === "ALL"
               ? `Todos (${orders.length})`
-              : `${statusConfig[s].label} (${orders.filter((o) => o.status === s).length})`}
+              : s === "TO_COLLECT"
+                ? `A cobrar (${toCollectCount})`
+                : `${statusConfig[s].label} (${orders.filter((o) => o.status === s).length})`}
           </button>
         ))}
       </div>
@@ -446,10 +566,18 @@ export function OrdersDashboard({
           const isRoomDelivery =
             order.delivery_method === "ROOM_DELIVERY" ||
             order.delivery_method === "HOME_DELIVERY";
-          const statusLabel =
-            order.status === "READY_FOR_PICKUP" && isRoomDelivery
+          const awaitingInPerson = isAwaitingInPersonPayment(order);
+          const statusLabel = awaitingInPerson
+            ? order.delivery_method === "ROOM_DELIVERY"
+              ? "A cobrar na entrega"
+              : "A cobrar na retirada"
+            : order.status === "READY_FOR_PICKUP" && isRoomDelivery
               ? "Pronto p/ Entrega"
               : config.label;
+          const statusColor = awaitingInPerson
+            ? "bg-purple-100 text-purple-800 border-purple-200"
+            : config.color;
+          const StatusBadgeIcon = awaitingInPerson ? HandCoins : StatusIcon;
 
           return (
             <article
@@ -461,12 +589,20 @@ export function OrdersDashboard({
                   <h4 className="truncate font-medium">
                     {order.customer_name}
                   </h4>
-                  <p className="text-xs text-muted-foreground">
-                    {order.customer_email}
-                  </p>
+                  {order.customer_email && (
+                    <p className="text-xs text-muted-foreground">
+                      {order.customer_email}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-muted-foreground">
                     {formatDate(order.created_at)} • {deliveryShortLabel(order)}{" "}
                     • {formatPrice(Number(order.total_amount))}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {paymentSummary(order)}
+                    {order.channel === "RECEPTION"
+                      ? " • lançado na recepção"
+                      : ""}
                   </p>
                   {formatFullAddress(order) && (
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -476,9 +612,9 @@ export function OrdersDashboard({
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${config.color}`}
+                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${statusColor}`}
                   >
-                    <StatusIcon className="size-3" />
+                    <StatusBadgeIcon className="size-3" />
                     {statusLabel}
                   </span>
                   {order.pickup_code && (
@@ -496,6 +632,44 @@ export function OrdersDashboard({
                   customerName={order.customer_name}
                   totalAmount={Number(order.total_amount)}
                 />
+
+                {/* Pagar na entrega: a equipe cobra e entrega no mesmo momento */}
+                {awaitingInPerson && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        setConfirmAction({
+                          kind: "settle",
+                          orderId: order.id,
+                          method: "CARD",
+                        })
+                      }
+                      className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                    >
+                      <CreditCard className="mr-1 size-3" />
+                      {isLoading ? "..." : "Recebi no cartão"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        setConfirmAction({
+                          kind: "settle",
+                          orderId: order.id,
+                          method: "CASH",
+                        })
+                      }
+                      className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                    >
+                      <Banknote className="mr-1 size-3" />
+                      {isLoading ? "..." : "Recebi em dinheiro"}
+                    </Button>
+                  </>
+                )}
 
                 {/* PAID → PREPARING */}
                 {order.status === "PAID" && (
@@ -570,8 +744,10 @@ export function OrdersDashboard({
                     </Button>
                   )}
 
-                {/* ADMIN: cancel order */}
-                {isAdmin && !["COMPLETED", "CANCELLED", "EXPIRED"].includes(order.status) && (
+                {/* Cancelar: ADMIN sempre; STAFF só o "pagar na entrega" ainda
+                    não cobrado (sem dinheiro nem estoque envolvidos). */}
+                {(isAdmin || awaitingInPerson) &&
+                  !["COMPLETED", "CANCELLED", "EXPIRED"].includes(order.status) && (
                   <Button
                     size="sm"
                     variant="ghost"

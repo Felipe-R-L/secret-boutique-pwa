@@ -15,6 +15,10 @@ export type OrderStatus =
   | "CANCELLED"
   | "EXPIRED";
 
+export type PaymentMethod = "PIX" | "CARD" | "CASH";
+
+export type OrderChannel = "SITE" | "RECEPTION";
+
 export type Database = {
   public: {
     Tables: {
@@ -162,7 +166,7 @@ export type Database = {
         Row: {
           id: string;
           customer_name: string;
-          customer_email: string;
+          customer_email: string | null;
           delivery_method: "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
           room_number: string | null;
           delivery_fee: number;
@@ -173,7 +177,9 @@ export type Database = {
           delivery_neighborhood: string | null;
           delivery_city: string | null;
           delivery_state: string | null;
-          payment_method: "PIX";
+          payment_method: PaymentMethod;
+          cash_change_for: number | null;
+          channel: OrderChannel;
           status: OrderStatus;
           total_amount: number;
           mercadopago_order_id: string | null;
@@ -185,7 +191,7 @@ export type Database = {
         Insert: {
           id?: string;
           customer_name: string;
-          customer_email: string;
+          customer_email?: string | null;
           delivery_method: "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
           room_number?: string | null;
           delivery_fee?: number;
@@ -196,7 +202,9 @@ export type Database = {
           delivery_neighborhood?: string | null;
           delivery_city?: string | null;
           delivery_state?: string | null;
-          payment_method?: "PIX";
+          payment_method?: PaymentMethod;
+          cash_change_for?: number | null;
+          channel?: OrderChannel;
           status?: OrderStatus;
           total_amount: number;
           mercadopago_order_id?: string | null;
@@ -208,7 +216,7 @@ export type Database = {
         Update: {
           id?: string;
           customer_name?: string;
-          customer_email?: string;
+          customer_email?: string | null;
           delivery_method?: "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
           room_number?: string | null;
           delivery_fee?: number;
@@ -219,7 +227,9 @@ export type Database = {
           delivery_neighborhood?: string | null;
           delivery_city?: string | null;
           delivery_state?: string | null;
-          payment_method?: "PIX";
+          payment_method?: PaymentMethod;
+          cash_change_for?: number | null;
+          channel?: OrderChannel;
           status?: OrderStatus;
           total_amount?: number;
           mercadopago_order_id?: string | null;
