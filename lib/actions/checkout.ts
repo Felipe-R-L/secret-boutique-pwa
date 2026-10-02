@@ -1,8 +1,9 @@
 "use server";
 
+import { centsToDecimalString, formatCents } from "@/lib/money";
 import {
   initializeCheckoutSchema,
-  HOME_DELIVERY_FEE,
+  HOME_DELIVERY_FEE_CENTS,
   isInPersonPayment,
 } from "@/lib/schemas";
 import {
@@ -43,7 +44,7 @@ type CheckoutResult =
   | {
       ok: true;
       orderId: string;
-      totalAmount: number;
+      totalCents: number;
       pickupCode: string;
       paymentMethod: "PIX" | "CARD" | "CASH";
     }
@@ -68,7 +69,7 @@ export async function initializeCheckout(
   const productIds = parsed.data.items.map((item) => item.productId);
   const { data: products, error: productError } = await supabase
     .from("products")
-    .select("id,price,in_stock,stock_quantity,variants")
+    .select("id,price_cents,in_stock,stock_quantity,variants")
     .in("id", productIds);
 
   if (productError || !products) {
@@ -80,7 +81,7 @@ export async function initializeCheckout(
 
   const productMap = new Map(products.map((product) => [product.id, product]));
 
-  let totalAmount = 0;
+  let totalCents = 0;
   for (const item of parsed.data.items) {
     const product = productMap.get(item.productId);
     if (!product) {
@@ -120,16 +121,14 @@ export async function initializeCheckout(
       };
     }
 
-    totalAmount +=
-      Number(selectedVariant?.price ?? product.price) * item.quantity;
+    totalCents +=
+      (selectedVariant?.price_cents ?? product.price_cents) * item.quantity;
   }
 
   // Taxa fixa para entrega a domicílio; retirada/quarto não têm frete.
-  const deliveryFee =
-    parsed.data.deliveryMethod === "HOME_DELIVERY" ? HOME_DELIVERY_FEE : 0;
-  totalAmount += deliveryFee;
-
-  totalAmount = Number(totalAmount.toFixed(2));
+  const deliveryFeeCents =
+    parsed.data.deliveryMethod === "HOME_DELIVERY" ? HOME_DELIVERY_FEE_CENTS : 0;
+  totalCents += deliveryFeeCents;
 
   const paymentMethod = parsed.data.paymentMethod;
   const inPerson = isInPersonPayment(paymentMethod);
@@ -139,8 +138,8 @@ export async function initializeCheckout(
       : null;
 
   if (
-    parsed.data.cashChangeFor !== undefined &&
-    parsed.data.cashChangeFor < totalAmount
+    parsed.data.cashChangeForCents !== undefined &&
+    parsed.data.cashChangeForCents < totalCents
   ) {
     return {
       ok: false,
@@ -194,7 +193,7 @@ export async function initializeCheckout(
     customer_email: inPerson ? null : (parsed.data.customerEmail ?? null),
     delivery_method: parsed.data.deliveryMethod,
     room_number: roomNumber,
-    delivery_fee: deliveryFee,
+    delivery_fee_cents: deliveryFeeCents,
     delivery_cep: isHomeDelivery
       ? ((parsed.data.deliveryCep ?? "").replace(/\D/g, "") || null)
       : null,
@@ -217,11 +216,11 @@ export async function initializeCheckout(
       ? (parsed.data.deliveryState?.trim().toUpperCase() ?? null)
       : null,
     payment_method: paymentMethod,
-    cash_change_for:
-      paymentMethod === "CASH" ? (parsed.data.cashChangeFor ?? null) : null,
+    cash_change_for_cents:
+      paymentMethod === "CASH" ? (parsed.data.cashChangeForCents ?? null) : null,
     channel: "SITE" as const,
     status: "PENDING" as const,
-    total_amount: totalAmount,
+    total_cents: totalCents,
     pickup_code: pickupCode,
   };
 
@@ -252,7 +251,7 @@ export async function initializeCheckout(
       variant_label: selectedVariant?.label ?? null,
       variant_attributes: selectedVariant?.attributes ?? null,
       quantity: item.quantity,
-      unit_price: Number(selectedVariant?.price ?? product.price),
+      unit_price_cents: selectedVariant?.price_cents ?? product.price_cents,
     };
   });
 
@@ -269,10 +268,7 @@ export async function initializeCheckout(
   // não há confirmação online: o aviso sai agora, para a recepção preparar.
   if (inPerson) {
     try {
-      const total = new Intl.NumberFormat("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      }).format(totalAmount);
+      const total = formatCents(totalCents);
       const destino = roomNumber
         ? `Quarto ${roomNumber}`
         : "Retirada na recepção";
@@ -280,7 +276,7 @@ export async function initializeCheckout(
         title: "Novo pedido — pagar na entrega 🛍️",
         body: `${destino} • ${total} • ${describeInPersonPayment(
           paymentMethod,
-          orderInsert.cash_change_for,
+          orderInsert.cash_change_for_cents,
         )}`,
         url: "/admin/orders",
         tag: `order-${orderData.id}`,
@@ -293,7 +289,7 @@ export async function initializeCheckout(
   return {
     ok: true,
     orderId: orderData.id,
-    totalAmount,
+    totalCents,
     pickupCode,
     paymentMethod,
   };
@@ -307,7 +303,7 @@ export async function checkOrderStatus(orderId: unknown) {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("orders")
-    .select("id,status,total_amount,pickup_code,mercadopago_order_id")
+    .select("id,status,total_cents,pickup_code,mercadopago_order_id")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -361,7 +357,7 @@ export async function checkOrderStatus(orderId: unknown) {
           // banco para não exibir um código diferente do gravado.
           const { data: fresh } = await supabase
             .from("orders")
-            .select("id,status,total_amount,pickup_code")
+            .select("id,status,total_cents,pickup_code")
             .eq("id", data.id)
             .maybeSingle();
 
@@ -370,7 +366,7 @@ export async function checkOrderStatus(orderId: unknown) {
             data: {
               id: data.id,
               status: fresh?.status ?? "PAID",
-              totalAmount: Number(fresh?.total_amount ?? data.total_amount),
+              totalCents: fresh?.total_cents ?? data.total_cents,
               pickupCode: fresh?.pickup_code ?? null,
             },
           };
@@ -398,7 +394,7 @@ export async function checkOrderStatus(orderId: unknown) {
           data: {
             id: data.id,
             status: "PAID",
-            totalAmount: Number(data.total_amount),
+            totalCents: data.total_cents,
             pickupCode,
           },
         };
@@ -414,7 +410,7 @@ export async function checkOrderStatus(orderId: unknown) {
     data: {
       id: data.id,
       status: data.status,
-      totalAmount: Number(data.total_amount),
+      totalCents: data.total_cents,
       pickupCode: data.pickup_code,
     },
   };
@@ -441,7 +437,7 @@ export async function generatePixOrder(
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select(
-      "id,customer_name,customer_email,payment_method,total_amount,status,mercadopago_order_id",
+      "id,customer_name,customer_email,payment_method,total_cents,status,mercadopago_order_id",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -473,7 +469,7 @@ export async function generatePixOrder(
       type: "online",
       processing_mode: "automatic",
       external_reference: order.id,
-      total_amount: String(Number(order.total_amount).toFixed(2)),
+      total_amount: centsToDecimalString(order.total_cents),
       description: `Pedido ${order.id}`,
       payer: {
         email: order.customer_email ?? FALLBACK_PIX_PAYER_EMAIL,
@@ -491,7 +487,7 @@ export async function generatePixOrder(
       transactions: {
         payments: [
           {
-            amount: String(Number(order.total_amount).toFixed(2)),
+            amount: centsToDecimalString(order.total_cents),
             payment_method: {
               id: "pix",
               type: "bank_transfer",

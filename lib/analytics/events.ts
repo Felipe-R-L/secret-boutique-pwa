@@ -44,6 +44,7 @@ export const TRAFFIC_SOURCE_LABELS: Record<TrafficSource, string> = {
 
 export type TrackData = {
   productId?: string;
-  value?: number;
+  /** Centavos. */
+  valueCents?: number;
   props?: Record<string, string | number | boolean | null>;
 };

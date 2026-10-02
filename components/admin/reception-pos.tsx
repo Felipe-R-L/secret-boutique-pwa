@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents, parseBrlToCents } from "@/lib/money";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
@@ -24,13 +25,16 @@ import {
   createReceptionOrder,
   confirmInPersonPayment,
 } from "@/lib/actions/reception";
-import { cashChangeDue, describeInPersonPayment } from "@/lib/payment-labels";
+import {
+  cashChangeDueCents,
+  describeInPersonPayment,
+} from "@/lib/payment-labels";
 import { generatePixOrder, checkOrderStatus } from "@/lib/actions/checkout";
 
 type VariantOption = {
   id: string;
   label: string;
-  price: number;
+  price_cents: number;
   stock_quantity: number;
   in_stock: boolean;
 };
@@ -38,7 +42,7 @@ type VariantOption = {
 type ProductOption = {
   id: string;
   name: string;
-  price: number;
+  price_cents: number;
   stock_quantity: number;
   in_stock: boolean;
   imageUrl: string | null;
@@ -51,7 +55,7 @@ type CartLine = {
   productName: string;
   variantId?: string;
   variantLabel?: string;
-  unitPrice: number;
+  unitPriceCents: number;
   quantity: number;
   maxStock: number;
 };
@@ -60,20 +64,6 @@ type DeliveryMethod = "MOTEL_PICKUP" | "ROOM_DELIVERY";
 type PaymentMethod = "PIX" | "CARD" | "CASH";
 // registered: pedido de cartão/dinheiro para o quarto, a cobrar na entrega.
 type Phase = "building" | "paying" | "paid" | "registered";
-
-function parseBrl(value: string): number | null {
-  const normalized = value.replace(/[^\d,]/g, "").replace(",", ".");
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function formatPrice(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
 
 function lineKey(productId: string, variantId?: string) {
   return `${productId}:${variantId ?? "base"}`;
@@ -106,8 +96,8 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const total = useMemo(
-    () => cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
+  const totalCents = useMemo(
+    () => cart.reduce((sum, line) => sum + line.unitPriceCents * line.quantity, 0),
     [cart],
   );
 
@@ -146,7 +136,7 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
           productName: product.name,
           variantId: variant?.id,
           variantLabel: variant?.label,
-          unitPrice: variant?.price ?? product.price,
+          unitPriceCents: variant?.price_cents ?? product.price_cents,
           quantity: 1,
           maxStock,
         },
@@ -211,13 +201,15 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     }, 3000);
   };
 
-  const cashChangeValue = parseBrl(cashChangeFor);
+  const cashChangeCents = parseBrlToCents(cashChangeFor);
   const cashChangeInvalid =
     paymentMethod === "CASH" &&
-    cashChangeValue !== null &&
-    cashChangeValue < total;
-  const changeDue =
-    paymentMethod === "CASH" ? cashChangeDue(cashChangeValue, total) : null;
+    cashChangeCents !== null &&
+    cashChangeCents < totalCents;
+  const changeDueCents =
+    paymentMethod === "CASH"
+      ? cashChangeDueCents(cashChangeCents, totalCents)
+      : null;
 
   const validateSale = () => {
     if (cart.length === 0) {
@@ -246,8 +238,8 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
       deliveryMethod === "ROOM_DELIVERY" ? roomNumber.trim() : undefined,
     customerName: customerName.trim() || undefined,
     paymentMethod,
-    cashChangeFor:
-      paymentMethod === "CASH" && cashChangeValue ? cashChangeValue : undefined,
+    cashChangeForCents:
+      paymentMethod === "CASH" && cashChangeCents ? cashChangeCents : undefined,
     settleNow,
   });
 
@@ -377,14 +369,14 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
         <div className="rounded-xl border border-purple-200 bg-white p-3">
           <p className="text-xs text-muted-foreground">Cobrar na entrega</p>
           <p className="text-2xl font-bold text-foreground">
-            {formatPrice(total)}
+            {formatCents(totalCents)}
           </p>
           <p className="text-xs text-muted-foreground">
-            {describeInPersonPayment(paymentMethod, cashChangeValue)}
+            {describeInPersonPayment(paymentMethod, cashChangeCents)}
           </p>
-          {changeDue && (
+          {changeDueCents && (
             <p className="mt-1 text-sm font-medium text-purple-800">
-              Levar {formatPrice(changeDue)} de troco
+              Levar {formatCents(changeDueCents)} de troco
             </p>
           )}
         </div>
@@ -408,7 +400,7 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-pastel-sage opacity-75" />
               <span className="relative inline-flex size-2 rounded-full bg-pastel-sage" />
             </span>
-            Aguardando pagamento — {formatPrice(total)}
+            Aguardando pagamento — {formatCents(totalCents)}
           </div>
 
           {isSubmitting ? (
@@ -552,10 +544,10 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
                   {product.variants.length > 0
                     ? "A partir de "
                     : ""}
-                  {formatPrice(
+                  {formatCents(
                     product.variants.length > 0
-                      ? Math.min(...product.variants.map((v) => v.price))
-                      : product.price,
+                      ? Math.min(...product.variants.map((v) => v.price_cents))
+                      : product.price_cents,
                   )}
                 </span>
                 {product.variants.length > 0 && (
@@ -599,7 +591,7 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    {formatPrice(line.unitPrice)}
+                    {formatCents(line.unitPriceCents)}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
@@ -720,9 +712,9 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
                 placeholder="Troco para quanto? (opcional)"
                 className="h-10 rounded-lg"
               />
-              {changeDue && (
+              {changeDueCents && (
                 <p className="text-xs text-muted-foreground">
-                  Troco: {formatPrice(changeDue)}
+                  Troco: {formatCents(changeDueCents)}
                 </p>
               )}
             </>
@@ -731,7 +723,7 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
 
         <div className="flex items-center justify-between border-t border-border pt-3 text-lg font-semibold">
           <span>Total</span>
-          <span>{formatPrice(total)}</span>
+          <span>{formatCents(totalCents)}</span>
         </div>
 
         {error && (
@@ -759,7 +751,7 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
             {isSubmitting
               ? "Registrando..."
               : deliveryMethod === "MOTEL_PICKUP"
-                ? `Recebi ${formatPrice(total)} — finalizar venda`
+                ? `Recebi ${formatCents(totalCents)} — finalizar venda`
                 : "Registrar pedido — cobrar na entrega"}
           </Button>
         )}
@@ -803,7 +795,7 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
                       </span>
                     </span>
                     <span className="font-medium">
-                      {formatPrice(variant.price)}
+                      {formatCents(variant.price_cents)}
                     </span>
                   </button>
                 );

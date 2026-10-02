@@ -108,7 +108,10 @@ export function Catalog({
   }, [visibleProducts, selectedProduct]);
 
   const handleProductSelect = (product: Product) => {
-    trackEvent("product_view", { productId: product.id, value: product.price });
+    trackEvent("product_view", {
+      productId: product.id,
+      valueCents: product.price_cents,
+    });
     setSelectedProduct(product);
     if (isDesktop) {
       setModalOpen(true);
@@ -118,7 +121,10 @@ export function Catalog({
   };
 
   const handleRelatedProductSelect = (product: Product) => {
-    trackEvent("product_view", { productId: product.id, value: product.price });
+    trackEvent("product_view", {
+      productId: product.id,
+      valueCents: product.price_cents,
+    });
     setSelectedProduct(product);
   };
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCents } from '@/lib/money';
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import {
@@ -21,19 +22,12 @@ import { describeInPersonPayment } from '@/lib/payment-labels';
 
 type OrderSummary = {
   status: string;
-  totalAmount: number;
+  totalCents: number;
   paymentMethod: string;
   deliveryMethod: string;
   roomNumber: string | null;
-  cashChangeFor: number | null;
+  cashChangeForCents: number | null;
 };
-
-function formatBrl(value: number) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-}
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
@@ -61,11 +55,11 @@ function CheckoutSuccessContent() {
         setPickupCode(json.data.pickupCode);
         setSummary({
           status: json.data.status,
-          totalAmount: Number(json.data.totalAmount ?? 0),
+          totalCents: Number(json.data.totalCents ?? 0),
           paymentMethod: json.data.paymentMethod ?? 'PIX',
           deliveryMethod: json.data.deliveryMethod ?? 'MOTEL_PICKUP',
           roomNumber: json.data.roomNumber ?? null,
-          cashChangeFor: json.data.cashChangeFor ?? null,
+          cashChangeForCents: json.data.cashChangeForCents ?? null,
         });
 
         // Evento de funil — uma vez por pedido (revisitas não contam de novo)
@@ -80,7 +74,7 @@ function CheckoutSuccessContent() {
           orderId,
           pickupCode: json.data.pickupCode,
           email: '',
-          total: Number(json.data.totalAmount ?? 0),
+          totalCents: Number(json.data.totalCents ?? 0),
           date: json.data.createdAt ?? new Date().toISOString(),
           status: json.data.status,
           paymentMethod: json.data.paymentMethod,
@@ -292,7 +286,7 @@ function InPersonOrderReceived({
             <span>{isRoom ? 'Pague na entrega' : 'Pague na retirada'}</span>
           </div>
           <p className='text-3xl font-bold text-foreground'>
-            {formatBrl(summary.totalAmount)}
+            {formatCents(summary.totalCents)}
           </p>
           <p
             className='text-xs text-muted-foreground'
@@ -300,7 +294,7 @@ function InPersonOrderReceived({
           >
             {describeInPersonPayment(
               summary.paymentMethod,
-              summary.cashChangeFor,
+              summary.cashChangeForCents,
             )}
           </p>
         </div>

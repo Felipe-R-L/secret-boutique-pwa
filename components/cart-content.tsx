@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import { useEffect, useMemo, useRef } from "react";
 import { trackEvent } from "@/lib/analytics/client";
 import Link from "next/link";
@@ -24,7 +25,7 @@ interface CartContentProps {
 
 export function CartContent({ products }: CartContentProps) {
   const items = useCartStore((state) => state.items);
-  const getTotal = useCartStore((state) => state.getTotal);
+  const getTotalCents = useCartStore((state) => state.getTotalCents);
   const addItem = useCartStore((state) => state.addItem);
   const isAdultMode = useAgeModeStore((state) => state.mode === "adult");
 
@@ -34,16 +35,10 @@ export function CartContent({ products }: CartContentProps) {
     if (cartViewTracked.current || items.length === 0) return;
     cartViewTracked.current = true;
     trackEvent("cart_view", {
-      value: getTotal(),
+      valueCents: getTotalCents(),
       props: { items: items.length },
     });
-  }, [items, getTotal]);
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
+  }, [items, getTotalCents]);
 
   // Sugestões: produtos fora do carrinho, em estoque e sem variantes (para o
   // "Adicionar" funcionar em um clique). Mesma categoria dos itens primeiro.
@@ -85,7 +80,7 @@ export function CartContent({ products }: CartContentProps) {
               style={{ fontFamily: "Inter, sans-serif" }}
             >
               {items.length} {items.length === 1 ? "item" : "itens"} •{" "}
-              {formatPrice(getTotal())}
+              {formatCents(getTotalCents())}
             </span>
           )}
         </div>
@@ -166,7 +161,7 @@ export function CartContent({ products }: CartContentProps) {
                           </p>
                           <div className="flex items-center justify-between gap-1">
                             <span className="font-sans text-sm font-semibold text-foreground">
-                              {formatPrice(product.price)}
+                              {formatCents(product.price_cents)}
                             </span>
                             <Button
                               size="icon-sm"

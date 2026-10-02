@@ -26,9 +26,12 @@ export function isInPersonPayment(method: string | null | undefined) {
   return method === "CARD" || method === "CASH";
 }
 
-// Taxa fixa de entrega a domicílio (R$). Fonte da verdade compartilhada
-// entre o cálculo server-side (checkout) e a exibição no formulário.
-export const HOME_DELIVERY_FEE = 5;
+// Valores monetários são sempre centavos inteiros (ver lib/money.ts).
+const centsSchema = z.coerce.number().int();
+
+// Taxa fixa de entrega a domicílio, em centavos. Fonte da verdade
+// compartilhada entre o cálculo server-side (checkout) e o formulário.
+export const HOME_DELIVERY_FEE_CENTS = 500;
 
 export const upsertAdminUserSchema = z
   .object({
@@ -68,7 +71,7 @@ const productVariantSchema = z
     id: z.string().trim().min(1).max(120).optional(),
     sku: z.string().trim().min(1).max(120),
     label: z.string().trim().min(1).max(140),
-    price: z.coerce.number().positive(),
+    priceCents: centsSchema.positive(),
     stockQuantity: z.coerce.number().int().min(0),
     inStock: z.coerce.boolean().default(true),
     isDefault: z.coerce.boolean().default(false),
@@ -81,7 +84,7 @@ export const productMutationSchema = z
   .object({
     productId: z.string().uuid().optional(),
     name: z.string().trim().min(1).max(140),
-    price: z.coerce.number().positive(),
+    priceCents: centsSchema.positive(),
     description: z.string().trim().min(1).max(1500),
     curatorship: z.string().trim().max(6000).optional(),
     category: z.string().trim().min(1).max(80),
@@ -147,8 +150,9 @@ export const initializeCheckoutSchema = z
     payerLastName: z.string().trim().min(1).max(60).optional(),
     payerCpf: cpfSchema.optional(),
     paymentMethod: paymentMethodSchema,
-    // Dinheiro: valor da nota para a recepção levar o troco.
-    cashChangeFor: z.number().positive().max(10000).optional(),
+    // Dinheiro: valor da nota (em centavos, até R$ 10.000) para a recepção
+    // levar o troco.
+    cashChangeForCents: z.number().int().positive().max(1_000_000).optional(),
     items: z.array(checkoutItemSchema).min(1),
   })
   .strict()
@@ -204,11 +208,14 @@ export const initializeCheckoutSchema = z
       });
     }
 
-    if (value.cashChangeFor !== undefined && value.paymentMethod !== "CASH") {
+    if (
+      value.cashChangeForCents !== undefined &&
+      value.paymentMethod !== "CASH"
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Troco só vale para pagamento em dinheiro",
-        path: ["cashChangeFor"],
+        path: ["cashChangeForCents"],
       });
     }
 
@@ -256,7 +263,7 @@ export const adminOrderMutationSchema = z
     roomNumber: z.string().trim().max(20).optional(),
     paymentMethod: paymentMethodSchema.default("PIX"),
     status: orderStatusSchema.default("PENDING"),
-    totalAmount: z.coerce.number().min(0),
+    totalCents: centsSchema.min(0),
   })
   .strict()
   .superRefine((value, ctx) => {

@@ -4,8 +4,10 @@ export const stockEntrySchema = z
   .object({
     productId: z.string().uuid(),
     quantity: z.coerce.number().int().positive("Quantidade deve ser positiva"),
-    invoiceTotal: z.coerce
+    // Centavos.
+    invoiceTotalCents: z.coerce
       .number()
+      .int()
       .positive("Valor total da NF deve ser positivo"),
     notes: z.string().trim().max(500).optional(),
   })

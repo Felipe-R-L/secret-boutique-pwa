@@ -22,7 +22,8 @@ const trackSchema = z
     source: z.enum(TRAFFIC_SOURCES).optional(),
     path: z.string().max(200).optional(),
     productId: z.string().uuid().optional(),
-    value: z.number().finite().min(0).max(100000).optional(),
+    // Centavos (até R$ 100.000,00).
+    valueCents: z.number().int().min(0).max(10_000_000).optional(),
     props: z
       .record(z.string().max(40), propValue)
       .refine((p) => Object.keys(p).length <= 12, "too many props")
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
       path: data.path ?? null,
       source: data.source ?? null,
       product_id: data.productId ?? null,
-      value: data.value ?? null,
+      value_cents: data.valueCents ?? null,
       props: data.props ?? {},
     });
 

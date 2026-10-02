@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import React from "react";
 import Image from "next/image";
 import { ShoppingBag, Star } from "lucide-react";
@@ -41,13 +42,6 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
     addItem(product);
     showAddedToCartToast(product.name);
-  };
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
   };
 
   return (
@@ -131,7 +125,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
                 a partir de
               </span>
             )}
-            {formatPrice(product.price)}
+            {formatCents(product.price_cents)}
           </p>
         </div>
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCents } from '@/lib/money';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
@@ -76,7 +77,7 @@ export default function MeusPedidosPage() {
           if (json.ok && json.data?.status) {
             mergeOrder(orderId, {
               status: json.data.status,
-              total: Number(json.data.totalAmount ?? 0),
+              totalCents: Number(json.data.totalCents ?? 0),
               pickupCode: json.data.pickupCode ?? null,
               date: json.data.createdAt ?? new Date().toISOString(),
               paymentMethod: json.data.paymentMethod,
@@ -109,12 +110,6 @@ export default function MeusPedidosPage() {
       }
     });
   }, [mounted]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(price);
 
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('pt-BR', {
@@ -226,7 +221,7 @@ export default function MeusPedidosPage() {
                     )}
 
                   <div className='flex items-center justify-between'>
-                    <p className='font-medium'>{formatPrice(order.total)}</p>
+                    <p className='font-medium'>{formatCents(order.totalCents)}</p>
                     <Button
                       variant='ghost'
                       size='sm'

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCents } from '@/lib/money';
 import {
   TrendingUp,
   DollarSign,
@@ -14,18 +15,11 @@ interface DashboardPanelProps {
   metrics: DashboardMetrics;
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-}
-
 export function DashboardPanel({ metrics }: DashboardPanelProps) {
   const kpiCards = [
     {
       title: 'Ticket Médio',
-      value: formatCurrency(metrics.avgTicket),
+      value: formatCents(metrics.avgTicketCents),
       detail: `${metrics.totalOrders} pedido${metrics.totalOrders !== 1 ? 's' : ''} processado${metrics.totalOrders !== 1 ? 's' : ''}`,
       icon: ShoppingCart,
       cardClassName:
@@ -36,7 +30,7 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
     },
     {
       title: 'Faturamento Total',
-      value: formatCurrency(metrics.totalRevenue),
+      value: formatCents(metrics.totalRevenueCents),
       detail: 'Pedidos pagos, em preparo e prontos para retirada',
       icon: DollarSign,
       cardClassName:
@@ -47,7 +41,7 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
     },
     {
       title: 'Lucro Total',
-      value: formatCurrency(metrics.totalProfit),
+      value: formatCents(metrics.totalProfitCents),
       detail: 'Estimado com base nos custos médios cadastrados',
       icon: TrendingUp,
       cardClassName:
@@ -58,7 +52,7 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
     },
     {
       title: 'Faturamento do Estoque',
-      value: formatCurrency(metrics.projectedInventoryRevenue),
+      value: formatCents(metrics.projectedInventoryRevenueCents),
       detail: 'Venda potencial do estoque atual pelo preco de tabela',
       icon: DollarSign,
       cardClassName:
@@ -69,7 +63,7 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
     },
     {
       title: 'Lucro do Estoque',
-      value: formatCurrency(metrics.projectedInventoryProfit),
+      value: formatCents(metrics.projectedInventoryProfitCents),
       detail: 'Lucro potencial do estoque atual pelo custo medio',
       icon: BarChart3,
       cardClassName:
@@ -91,7 +85,7 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
     },
     {
       title: 'Total Investido',
-      value: formatCurrency(metrics.totalCostInvested),
+      value: formatCents(metrics.totalCostInvestedCents),
       detail: 'Entradas de estoque registradas para revenda',
       icon: TrendingUp,
       cardClassName:
@@ -171,7 +165,7 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
                     </p>
                   </div>
                   <span className='text-sm font-semibold tabular-nums'>
-                    {formatCurrency(item.total_revenue)}
+                    {formatCents(item.total_revenue_cents)}
                   </span>
                 </div>
               ))}
@@ -219,10 +213,10 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
                     </p>
                     <div className='flex items-center gap-2 text-xs text-muted-foreground'>
                       <span>
-                        Custo: {formatCurrency(item.weighted_avg_cost)}
+                        Custo: {formatCents(item.weighted_avg_cost_cents)}
                       </span>
                       <span>→</span>
-                      <span>Venda: {formatCurrency(item.sell_price)}</span>
+                      <span>Venda: {formatCents(item.sell_price_cents)}</span>
                     </div>
                   </div>
                   <div className='text-right'>
@@ -230,7 +224,7 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
                       {item.profit_margin_pct}% margem
                     </p>
                     <p className='text-xs tabular-nums text-muted-foreground'>
-                      Lucro: {formatCurrency(item.total_profit)}
+                      Lucro: {formatCents(item.total_profit_cents)}
                     </p>
                   </div>
                 </div>
@@ -278,10 +272,10 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
                       {item.product_name}
                     </td>
                     <td className='px-4 py-3 text-right tabular-nums'>
-                      {formatCurrency(item.product_price)}
+                      {formatCents(item.product_price_cents)}
                     </td>
                     <td className='px-4 py-3 text-right tabular-nums'>
-                      {formatCurrency(item.weighted_avg_cost)}
+                      {formatCents(item.weighted_avg_cost_cents)}
                     </td>
                     <td className='px-4 py-3 text-right'>
                       <span
@@ -300,7 +294,7 @@ export function DashboardPanel({ metrics }: DashboardPanelProps) {
                       {item.stock_quantity} un.
                     </td>
                     <td className='px-4 py-3 text-right tabular-nums text-muted-foreground'>
-                      {formatCurrency(item.total_invested)}
+                      {formatCents(item.total_invested_cents)}
                     </td>
                   </tr>
                 ))}

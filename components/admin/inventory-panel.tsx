@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents, parseBrlToCents } from "@/lib/money";
 import { useState, useTransition, useMemo } from "react";
 import {
   Package,
@@ -23,7 +24,7 @@ type VariantOption = {
 type ProductOption = {
   id: string;
   name: string;
-  price: number;
+  price_cents: number;
   stock_quantity: number;
   variants: VariantOption[];
 };
@@ -39,13 +40,6 @@ const typeLabels: Record<string, { label: string; color: string }> = {
   SALE: { label: "Venda", color: "bg-blue-100 text-blue-700 border-blue-200" },
   ADJUSTMENT: { label: "Ajuste", color: "bg-amber-100 text-amber-700 border-amber-200" },
 };
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
 
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -82,14 +76,15 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
   const adjVariants = adjProduct?.variants ?? [];
   const adjHasVariants = adjVariants.length > 0;
 
-  const unitCost = useMemo(() => {
+  const invoiceTotalCents = parseBrlToCents(invoiceTotal);
+
+  const unitCostCents = useMemo(() => {
     const qty = Number(quantity);
-    const total = Number(invoiceTotal);
-    if (qty > 0 && total > 0) {
-      return Number((total / qty).toFixed(2));
+    if (qty > 0 && invoiceTotalCents && invoiceTotalCents > 0) {
+      return Math.round(invoiceTotalCents / qty);
     }
     return null;
-  }, [quantity, invoiceTotal]);
+  }, [quantity, invoiceTotalCents]);
 
   const handleStockEntry = (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +95,7 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
       const result = await createStockEntry({
         productId: selectedProductId,
         quantity: Number(quantity),
-        invoiceTotal: Number(invoiceTotal),
+        invoiceTotalCents: invoiceTotalCents ?? 0,
         notes: notes.trim() || undefined,
       });
 
@@ -169,7 +164,7 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
             </p>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
-                {formatCurrency(product.price)}
+                {formatCents(product.price_cents)}
               </span>
               <Badge
                 variant={product.stock_quantity > 0 ? "secondary" : "outline"}
@@ -235,11 +230,11 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
               />
             </div>
 
-            {unitCost !== null && (
+            {unitCostCents !== null && (
               <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2">
                 <DollarSign className="size-4 text-green-600" />
                 <span className="text-sm font-medium text-green-700">
-                  Custo unitário: {formatCurrency(unitCost)}
+                  Custo unitário: {formatCents(unitCostCents)}
                 </span>
               </div>
             )}
@@ -434,13 +429,13 @@ export function InventoryPanel({ products, movements }: InventoryPanelProps) {
                           : `+${mov.quantity}`}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                        {mov.invoice_total != null
-                          ? formatCurrency(mov.invoice_total)
+                        {mov.invoice_total_cents != null
+                          ? formatCents(mov.invoice_total_cents)
                           : "—"}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                        {mov.unit_cost != null
-                          ? formatCurrency(mov.unit_cost)
+                        {mov.unit_cost_cents != null
+                          ? formatCents(mov.unit_cost_cents)
                           : "—"}
                       </td>
                       <td className="max-w-[200px] truncate px-4 py-3 text-xs text-muted-foreground">

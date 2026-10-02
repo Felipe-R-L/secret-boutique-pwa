@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import { useEffect, useState, useCallback } from "react";
 import {
   Package,
@@ -34,7 +35,7 @@ import {
 } from "@/lib/actions/orders";
 import { confirmInPersonPayment } from "@/lib/actions/reception";
 import {
-  cashChangeDue,
+  cashChangeDueCents,
   describeInPersonPayment,
   PAYMENT_METHOD_LABELS,
 } from "@/lib/payment-labels";
@@ -48,7 +49,7 @@ type Order = {
   customer_email: string | null;
   delivery_method: string;
   room_number: string | null;
-  delivery_fee?: number | null;
+  delivery_fee_cents?: number | null;
   delivery_cep?: string | null;
   delivery_street?: string | null;
   delivery_number?: string | null;
@@ -58,9 +59,9 @@ type Order = {
   delivery_state?: string | null;
   status: OrderStatus;
   payment_method?: string | null;
-  cash_change_for?: number | null;
+  cash_change_for_cents?: number | null;
   channel?: string | null;
-  total_amount: number;
+  total_cents: number;
   pickup_code: string | null;
   created_at: string;
   updated_at: string;
@@ -77,13 +78,13 @@ function isAwaitingInPersonPayment(order: Order): boolean {
 function paymentSummary(order: Order): string {
   const method = order.payment_method ?? "PIX";
   if (method === "PIX") return PAYMENT_METHOD_LABELS.PIX;
-  const label = describeInPersonPayment(method, order.cash_change_for);
-  const change = cashChangeDue(order.cash_change_for, order.total_amount);
+  const label = describeInPersonPayment(method, order.cash_change_for_cents);
+  const change = cashChangeDueCents(
+    order.cash_change_for_cents,
+    order.total_cents,
+  );
   if (method === "CASH" && change && order.status === "PENDING") {
-    return `${label} (levar ${new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(change)} de troco)`;
+    return `${label} (levar ${formatCents(change)} de troco)`;
   }
   return label;
 }
@@ -340,12 +341,6 @@ export function OrdersDashboard({
     setLoading(orderId, false);
   };
 
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
-
   // Executa a ação pendente depois que o admin confirma no modal.
   const runConfirmedAction = async () => {
     if (!confirmAction) return;
@@ -368,7 +363,7 @@ export function OrdersDashboard({
     const who = order?.customer_name ?? "o cliente";
 
     if (confirmAction.kind === "settle") {
-      const total = order ? formatPrice(Number(order.total_amount)) : "";
+      const total = order ? formatCents(order.total_cents) : "";
       const how =
         confirmAction.method === "CARD" ? "no cartão" : "em dinheiro";
       return {
@@ -596,7 +591,7 @@ export function OrdersDashboard({
                   )}
                   <p className="mt-1 text-xs text-muted-foreground">
                     {formatDate(order.created_at)} • {deliveryShortLabel(order)}{" "}
-                    • {formatPrice(Number(order.total_amount))}
+                    • {formatCents(order.total_cents)}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {paymentSummary(order)}
@@ -630,7 +625,7 @@ export function OrdersDashboard({
                 <OrderItemsButton
                   orderId={order.id}
                   customerName={order.customer_name}
-                  totalAmount={Number(order.total_amount)}
+                  totalCents={order.total_cents}
                 />
 
                 {/* Pagar na entrega: a equipe cobra e entrega no mesmo momento */}

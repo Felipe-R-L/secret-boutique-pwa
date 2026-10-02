@@ -1,5 +1,6 @@
 "use client";
 
+import { centsToDecimalString, parseBrlToCents } from "@/lib/money";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Plus, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -21,7 +22,8 @@ type VariantFormValue = {
   id?: string;
   sku: string;
   label: string;
-  price: number;
+  /** Centavos. */
+  priceCents: number;
   stockQuantity: number;
   inStock: boolean;
   isDefault?: boolean;
@@ -45,7 +47,8 @@ type VariantDraft = {
 type ProductFormValue = {
   productId?: string;
   name: string;
-  price: number;
+  /** Centavos. */
+  priceCents: number;
   category: string;
   description: string;
   curatorship?: string;
@@ -101,7 +104,7 @@ function createVariantDraft(
     id: value.id,
     sku: value.sku,
     label: value.label,
-    price: String(value.price),
+    price: centsToDecimalString(value.priceCents),
     stockQuantity: String(value.stockQuantity),
     inStock: value.inStock,
     isDefault: value.isDefault ?? index === 0,
@@ -139,7 +142,10 @@ export function ProductForm({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(initialValue?.name ?? "");
-  const [price, setPrice] = useState(String(initialValue?.price ?? ""));
+  // O campo é digitado em reais; vira centavos só no envio.
+  const [price, setPrice] = useState(
+    initialValue ? centsToDecimalString(initialValue.priceCents) : "",
+  );
   const [category, setCategory] = useState(initialValue?.category ?? "");
   const [description, setDescription] = useState(
     initialValue?.description ?? "",
@@ -368,8 +374,8 @@ export function ProductForm({
           return;
         }
 
-        const priceValue = Number(variant.price);
-        if (!Number.isFinite(priceValue) || priceValue <= 0) {
+        const priceCents = parseBrlToCents(variant.price);
+        if (priceCents === null || priceCents <= 0) {
           setMessage("Cada variante precisa de um preço válido.");
           return;
         }
@@ -403,7 +409,7 @@ export function ProductForm({
           id: variant.id,
           sku: variant.sku.trim(),
           label: variant.label.trim(),
-          price: priceValue,
+          priceCents,
           stockQuantity: stockValue,
           inStock: variant.inStock,
           isDefault: variant.isDefault,
@@ -415,7 +421,7 @@ export function ProductForm({
       const result = await upsertProduct({
         productId: initialValue?.productId,
         name,
-        price,
+        priceCents: parseBrlToCents(price) ?? 0,
         category,
         description,
         curatorship,

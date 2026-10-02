@@ -1,3 +1,4 @@
+import { formatCents } from '@/lib/money';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
@@ -193,7 +194,7 @@ export async function POST(request: Request) {
   const { data: order, error: orderLookupError } = await supabase
     .from('orders')
     .select(
-      'id,status,pickup_code,customer_name,total_amount,delivery_method,room_number,payment_method',
+      'id,status,pickup_code,customer_name,total_cents,delivery_method,room_number,payment_method',
     )
     .eq('mercadopago_order_id', mpOrderId)
     .maybeSingle();
@@ -280,10 +281,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const total = new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      }).format(Number(order.total_amount));
+      const total = formatCents(order.total_cents);
       const destino =
         order.delivery_method === 'ROOM_DELIVERY'
           ? `Quarto ${order.room_number ?? ''}`.trim()

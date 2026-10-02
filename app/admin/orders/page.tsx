@@ -10,7 +10,7 @@ export default async function AdminOrdersPage() {
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
     .select(
-      "id,customer_name,customer_email,delivery_method,room_number,delivery_fee,delivery_cep,delivery_street,delivery_number,delivery_complement,delivery_neighborhood,delivery_city,delivery_state,payment_method,cash_change_for,channel,status,total_amount,pickup_code,created_at,updated_at",
+      "id,customer_name,customer_email,delivery_method,room_number,delivery_fee_cents,delivery_cep,delivery_street,delivery_number,delivery_complement,delivery_neighborhood,delivery_city,delivery_state,payment_method,cash_change_for_cents,channel,status,total_cents,pickup_code,created_at,updated_at",
     )
     .order("created_at", { ascending: false })
     .limit(200);

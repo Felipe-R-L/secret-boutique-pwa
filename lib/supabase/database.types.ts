@@ -49,7 +49,7 @@ export type Database = {
         Row: {
           id: string;
           name: string;
-          price: number;
+          price_cents: number;
           description: string | null;
           curatorship: string | null;
           images: Json | null;
@@ -70,7 +70,7 @@ export type Database = {
         Insert: {
           id?: string;
           name: string;
-          price: number;
+          price_cents: number;
           description?: string | null;
           curatorship?: string | null;
           images?: Json | null;
@@ -91,7 +91,7 @@ export type Database = {
         Update: {
           id?: string;
           name?: string;
-          price?: number;
+          price_cents?: number;
           description?: string | null;
           curatorship?: string | null;
           images?: Json | null;
@@ -169,7 +169,7 @@ export type Database = {
           customer_email: string | null;
           delivery_method: "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
           room_number: string | null;
-          delivery_fee: number;
+          delivery_fee_cents: number;
           delivery_cep: string | null;
           delivery_street: string | null;
           delivery_number: string | null;
@@ -178,10 +178,10 @@ export type Database = {
           delivery_city: string | null;
           delivery_state: string | null;
           payment_method: PaymentMethod;
-          cash_change_for: number | null;
+          cash_change_for_cents: number | null;
           channel: OrderChannel;
           status: OrderStatus;
-          total_amount: number;
+          total_cents: number;
           mercadopago_order_id: string | null;
           pickup_code: string | null;
           completed_at: string | null;
@@ -194,7 +194,7 @@ export type Database = {
           customer_email?: string | null;
           delivery_method: "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
           room_number?: string | null;
-          delivery_fee?: number;
+          delivery_fee_cents?: number;
           delivery_cep?: string | null;
           delivery_street?: string | null;
           delivery_number?: string | null;
@@ -203,10 +203,10 @@ export type Database = {
           delivery_city?: string | null;
           delivery_state?: string | null;
           payment_method?: PaymentMethod;
-          cash_change_for?: number | null;
+          cash_change_for_cents?: number | null;
           channel?: OrderChannel;
           status?: OrderStatus;
-          total_amount: number;
+          total_cents: number;
           mercadopago_order_id?: string | null;
           pickup_code?: string | null;
           completed_at?: string | null;
@@ -219,7 +219,7 @@ export type Database = {
           customer_email?: string | null;
           delivery_method?: "MOTEL_PICKUP" | "ROOM_DELIVERY" | "HOME_DELIVERY";
           room_number?: string | null;
-          delivery_fee?: number;
+          delivery_fee_cents?: number;
           delivery_cep?: string | null;
           delivery_street?: string | null;
           delivery_number?: string | null;
@@ -228,10 +228,10 @@ export type Database = {
           delivery_city?: string | null;
           delivery_state?: string | null;
           payment_method?: PaymentMethod;
-          cash_change_for?: number | null;
+          cash_change_for_cents?: number | null;
           channel?: OrderChannel;
           status?: OrderStatus;
-          total_amount?: number;
+          total_cents?: number;
           mercadopago_order_id?: string | null;
           pickup_code?: string | null;
           completed_at?: string | null;
@@ -248,7 +248,7 @@ export type Database = {
           path: string | null;
           source: string | null;
           product_id: string | null;
-          value: number | null;
+          value_cents: number | null;
           props: Json;
           created_at: string;
         };
@@ -260,7 +260,7 @@ export type Database = {
           path?: string | null;
           source?: string | null;
           product_id?: string | null;
-          value?: number | null;
+          value_cents?: number | null;
           props?: Json;
           created_at?: string;
         };
@@ -272,7 +272,7 @@ export type Database = {
           path?: string | null;
           source?: string | null;
           product_id?: string | null;
-          value?: number | null;
+          value_cents?: number | null;
           props?: Json;
           created_at?: string;
         };
@@ -286,7 +286,7 @@ export type Database = {
           variant_label: string | null;
           variant_attributes: Json | null;
           quantity: number;
-          unit_price: number;
+          unit_price_cents: number;
           created_at: string;
         };
         Insert: {
@@ -297,7 +297,7 @@ export type Database = {
           variant_label?: string | null;
           variant_attributes?: Json | null;
           quantity: number;
-          unit_price: number;
+          unit_price_cents: number;
           created_at?: string;
         };
         Update: {
@@ -308,7 +308,7 @@ export type Database = {
           variant_label?: string | null;
           variant_attributes?: Json | null;
           quantity?: number;
-          unit_price?: number;
+          unit_price_cents?: number;
           created_at?: string;
         };
       };
@@ -318,8 +318,8 @@ export type Database = {
           product_id: string;
           type: "ENTRY" | "EXIT" | "SALE" | "ADJUSTMENT";
           quantity: number;
-          invoice_total: number | null;
-          unit_cost: number | null;
+          invoice_total_cents: number | null;
+          unit_cost_cents: number | null;
           variant_id: string | null;
           variant_label: string | null;
           notes: string | null;
@@ -330,8 +330,8 @@ export type Database = {
           product_id: string;
           type: "ENTRY" | "EXIT" | "SALE" | "ADJUSTMENT";
           quantity: number;
-          invoice_total?: number | null;
-          unit_cost?: number | null;
+          invoice_total_cents?: number | null;
+          unit_cost_cents?: number | null;
           variant_id?: string | null;
           variant_label?: string | null;
           notes?: string | null;
@@ -342,8 +342,8 @@ export type Database = {
           product_id?: string;
           type?: "ENTRY" | "EXIT" | "SALE" | "ADJUSTMENT";
           quantity?: number;
-          invoice_total?: number | null;
-          unit_cost?: number | null;
+          invoice_total_cents?: number | null;
+          unit_cost_cents?: number | null;
           variant_id?: string | null;
           variant_label?: string | null;
           notes?: string | null;

@@ -35,7 +35,8 @@ const receptionOrderSchema = z
     roomNumber: z.string().trim().max(20).optional(),
     customerName: z.string().trim().max(120).optional(),
     paymentMethod: paymentMethodSchema.default("PIX"),
-    cashChangeFor: z.number().positive().max(10000).optional(),
+    // Centavos, até R$ 10.000.
+    cashChangeForCents: z.number().int().positive().max(1_000_000).optional(),
     // Cartão/dinheiro já recebidos no balcão: o pedido nasce finalizado.
     settleNow: z.boolean().default(false),
   })
@@ -58,11 +59,14 @@ const receptionOrderSchema = z
         path: ["roomNumber"],
       });
     }
-    if (value.cashChangeFor !== undefined && value.paymentMethod !== "CASH") {
+    if (
+      value.cashChangeForCents !== undefined &&
+      value.paymentMethod !== "CASH"
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Troco só vale para pagamento em dinheiro.",
-        path: ["cashChangeFor"],
+        path: ["cashChangeForCents"],
       });
     }
     if (value.settleNow && !isInPersonPayment(value.paymentMethod)) {
@@ -78,7 +82,7 @@ type ReceptionResult =
   | {
       ok: true;
       orderId: string;
-      totalAmount: number;
+      totalCents: number;
       status: "PENDING" | "COMPLETED";
       pickupCode: string | null;
     }
@@ -117,7 +121,7 @@ export async function createReceptionOrder(
   const productIds = parsed.data.items.map((item) => item.productId);
   const { data: products, error: productError } = await supabase
     .from("products")
-    .select("id,price,in_stock,stock_quantity,variants")
+    .select("id,price_cents,in_stock,stock_quantity,variants")
     .in("id", productIds);
 
   if (productError || !products) {
@@ -129,7 +133,7 @@ export async function createReceptionOrder(
 
   const productMap = new Map(products.map((product) => [product.id, product]));
 
-  let totalAmount = 0;
+  let totalCents = 0;
   for (const item of parsed.data.items) {
     const product = productMap.get(item.productId);
     if (!product) {
@@ -166,15 +170,14 @@ export async function createReceptionOrder(
       };
     }
 
-    totalAmount +=
-      Number(selectedVariant?.price ?? product.price) * item.quantity;
+    totalCents +=
+      (selectedVariant?.price_cents ?? product.price_cents) * item.quantity;
   }
 
-  totalAmount = Number(totalAmount.toFixed(2));
 
   if (
-    parsed.data.cashChangeFor !== undefined &&
-    parsed.data.cashChangeFor < totalAmount
+    parsed.data.cashChangeForCents !== undefined &&
+    parsed.data.cashChangeForCents < totalCents
   ) {
     return {
       ok: false,
@@ -212,13 +215,13 @@ export async function createReceptionOrder(
       delivery_method: parsed.data.deliveryMethod,
       room_number: roomNumber,
       payment_method: parsed.data.paymentMethod,
-      cash_change_for:
+      cash_change_for_cents:
         parsed.data.paymentMethod === "CASH"
-          ? (parsed.data.cashChangeFor ?? null)
+          ? (parsed.data.cashChangeForCents ?? null)
           : null,
       channel: "RECEPTION" as const,
       status: "PENDING" as const,
-      total_amount: totalAmount,
+      total_cents: totalCents,
       pickup_code: pickupCode,
     })
     .select("id")
@@ -245,7 +248,7 @@ export async function createReceptionOrder(
       variant_label: selectedVariant?.label ?? null,
       variant_attributes: selectedVariant?.attributes ?? null,
       quantity: item.quantity,
-      unit_price: Number(selectedVariant?.price ?? product.price),
+      unit_price_cents: selectedVariant?.price_cents ?? product.price_cents,
     };
   });
 
@@ -267,7 +270,7 @@ export async function createReceptionOrder(
       targetLabel: customerName,
       metadata: {
         via: "reception",
-        total: totalAmount,
+        totalCents,
         deliveryMethod: parsed.data.deliveryMethod,
         paymentMethod: parsed.data.paymentMethod,
         items: parsed.data.items.length,
@@ -289,7 +292,7 @@ export async function createReceptionOrder(
     return {
       ok: true,
       orderId: orderData.id,
-      totalAmount,
+      totalCents,
       status: "COMPLETED",
       pickupCode,
     };
@@ -301,7 +304,7 @@ export async function createReceptionOrder(
   return {
     ok: true,
     orderId: orderData.id,
-    totalAmount,
+    totalCents,
     status: "PENDING",
     pickupCode,
   };
@@ -361,7 +364,7 @@ async function settleInPersonOrder(
       status: nextStatus,
       payment_method: method,
       // Troco só faz sentido em dinheiro; se mudou para cartão, limpa.
-      ...(method === "CARD" ? { cash_change_for: null } : {}),
+      ...(method === "CARD" ? { cash_change_for_cents: null } : {}),
       pickup_code: pickupCode,
       ...(complete ? { completed_at: now } : {}),
       updated_at: now,

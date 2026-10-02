@@ -41,7 +41,7 @@ function normalizeOrderPayload(
         : null,
     payment_method: input.paymentMethod,
     status: input.status,
-    total_amount: Number(input.totalAmount.toFixed(2)),
+    total_cents: input.totalCents,
     updated_at: new Date().toISOString(),
   };
 }
@@ -74,7 +74,7 @@ export async function createOrderByAdmin(input: unknown) {
       targetType: "order",
       targetLabel: parsed.data.customerName,
       metadata: {
-        total: Number(parsed.data.totalAmount.toFixed(2)),
+        totalCents: parsed.data.totalCents,
         deliveryMethod: parsed.data.deliveryMethod,
         status: parsed.data.status,
       },
@@ -121,7 +121,7 @@ export async function updateOrderByAdmin(input: unknown) {
       targetId: parsed.data.id,
       targetLabel: parsed.data.customerName,
       metadata: {
-        total: Number(parsed.data.totalAmount.toFixed(2)),
+        totalCents: parsed.data.totalCents,
         status: parsed.data.status,
       },
     },
@@ -357,7 +357,7 @@ export type OrderItemView = {
   imageUrl: string | null;
   variantLabel: string | null;
   quantity: number;
-  unitPrice: number;
+  unitPriceCents: number;
 };
 
 /**
@@ -380,7 +380,7 @@ export async function getOrderItems(input: unknown): Promise<
   const { data, error } = await supabase
     .from("order_items")
     .select(
-      "id,product_id,variant_label,quantity,unit_price,products(name,image,image_url,images)",
+      "id,product_id,variant_label,quantity,unit_price_cents,products(name,image,image_url,images)",
     )
     .eq("order_id", parsed.data.orderId)
     .order("id", { ascending: true });
@@ -412,7 +412,7 @@ export async function getOrderItems(input: unknown): Promise<
       imageUrl: product?.image_url ?? product?.image ?? firstImage ?? null,
       variantLabel: row.variant_label,
       quantity: row.quantity,
-      unitPrice: Number(row.unit_price),
+      unitPriceCents: row.unit_price_cents,
     };
   });
 

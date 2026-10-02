@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -8,17 +9,10 @@ import { useCartStore } from "@/lib/store/cart-store";
 
 const HIDDEN_PREFIXES = ["/cart", "/checkout", "/admin", "/auth"];
 
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
-
 export function CartBar() {
   const pathname = usePathname();
   const itemCount = useCartStore((state) => state.getItemCount());
-  const total = useCartStore((state) => state.getTotal());
+  const totalCents = useCartStore((state) => state.getTotalCents());
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -48,7 +42,7 @@ export function CartBar() {
             Ver carrinho · {itemCount} {itemCount === 1 ? "item" : "itens"}
           </span>
           <span className="flex items-center gap-2 font-sans text-base font-bold">
-            {formatBRL(total)}
+            {formatCents(totalCents)}
             <ArrowRight className="size-4" />
           </span>
         </Link>

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import { useState } from "react";
 import Image from "next/image";
 import { Package, ShoppingBag } from "lucide-react";
@@ -13,22 +14,17 @@ import {
 } from "@/components/ui/dialog";
 import { getOrderItems, type OrderItemView } from "@/lib/actions/orders";
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(price);
-
 interface OrderItemsButtonProps {
   orderId: string;
   customerName: string;
-  totalAmount: number;
+  /** Centavos. */
+  totalCents: number;
 }
 
 export function OrderItemsButton({
   orderId,
   customerName,
-  totalAmount,
+  totalCents,
 }: OrderItemsButtonProps) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<OrderItemView[] | null>(null);
@@ -68,7 +64,7 @@ export function OrderItemsButton({
         <DialogHeader>
           <DialogTitle>Itens do pedido</DialogTitle>
           <DialogDescription>
-            {customerName} • {formatPrice(Number(totalAmount))}
+            {customerName} • {formatCents(totalCents)}
           </DialogDescription>
         </DialogHeader>
 
@@ -127,12 +123,12 @@ export function OrderItemsButton({
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      {item.quantity} × {formatPrice(item.unitPrice)}
+                      {item.quantity} × {formatCents(item.unitPriceCents)}
                     </p>
                   </div>
 
                   <p className="shrink-0 text-sm font-semibold">
-                    {formatPrice(item.unitPrice * item.quantity)}
+                    {formatCents(item.unitPriceCents * item.quantity)}
                   </p>
                 </li>
               ))}
@@ -150,7 +146,7 @@ export function OrderItemsButton({
                   {itemCount} {itemCount === 1 ? "item" : "itens"}
                 </span>
                 <span className="font-semibold">
-                  Total {formatPrice(Number(totalAmount))}
+                  Total {formatCents(totalCents)}
                 </span>
               </div>
             )}

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCents } from '@/lib/money';
 import Image from 'next/image';
 import {
   Plus,
@@ -35,7 +36,7 @@ import {
 import { useCartStore, Product } from '@/lib/store/cart-store';
 import { getProductImages } from '@/lib/product-images';
 import {
-  getEffectiveProductPrice,
+  getEffectiveProductPriceCents,
   getProductVariant,
   hasProductVariants,
   isProductAvailable,
@@ -192,19 +193,12 @@ export function ProductDrawer({
     onOpenChange(false);
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(price);
-  };
-
   if (!product) return null;
 
   const selectedVariant = getProductVariant(product, selectedVariantId);
   const productHasVariants = hasProductVariants(product);
   const productImages = getProductImages(product, selectedVariantId);
-  const effectivePrice = getEffectiveProductPrice(product, selectedVariantId);
+  const effectivePriceCents = getEffectiveProductPriceCents(product, selectedVariantId);
   const currentInStock = isProductAvailable(product, selectedVariantId);
   const autoplayIsPaused =
     isAutoplayManuallyPaused ||
@@ -420,7 +414,7 @@ export function ProductDrawer({
                   {product.name}
                 </DrawerTitle>
                 <DrawerDescription className='font-sans text-3xl font-bold text-foreground'>
-                  {formatPrice(effectivePrice)}
+                  {formatCents(effectivePriceCents)}
                 </DrawerDescription>
               </DrawerHeader>
 
@@ -546,7 +540,7 @@ export function ProductDrawer({
               {productHasVariants && !selectedVariant
                 ? 'Escolha uma variante'
                 : currentInStock
-                  ? `Adicionar - ${formatPrice(effectivePrice * quantity)}`
+                  ? `Adicionar - ${formatCents(effectivePriceCents * quantity)}`
                   : 'Sem estoque'}
             </Button>
           </DrawerFooter>

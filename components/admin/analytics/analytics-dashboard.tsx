@@ -1,3 +1,4 @@
+import { formatCents } from "@/lib/money";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, CircleDashed, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,13 +14,6 @@ import { DotPlot } from "./dot-plot";
 import { VizTheme, stageColor } from "./viz-theme";
 
 const PERIODS = [7, 14, 30];
-
-function brl(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
 
 function percent(value: number | null) {
   if (value === null) return "—";
@@ -199,7 +193,7 @@ export function AnalyticsDashboard({ report }: { report: AnalyticsReport }) {
               },
               {
                 label: "Ticket médio",
-                value: kpis.avgTicket === null ? "—" : brl(kpis.avgTicket),
+                value: kpis.avgTicketCents === null ? "—" : formatCents(kpis.avgTicketCents),
                 detail: "valor médio por pedido",
               },
             ].map((kpi) => (
@@ -419,7 +413,7 @@ export function AnalyticsDashboard({ report }: { report: AnalyticsReport }) {
                             )}
                           </td>
                           <td className="py-2 pr-3 text-right tabular-nums">
-                            {product.price === null ? "—" : brl(product.price)}
+                            {product.priceCents === null ? "—" : formatCents(product.priceCents)}
                           </td>
                           <td className="py-2 pr-3 text-right tabular-nums">
                             {product.viewers}

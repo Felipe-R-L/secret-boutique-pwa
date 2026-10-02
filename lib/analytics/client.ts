@@ -1,5 +1,6 @@
 "use client";
 
+import { isCents } from "@/lib/money";
 import type { AnalyticsEvent, TrackData, TrafficSource } from "./events";
 
 // Identificadores anônimos: um uuid por navegador (visitante) e outro por
@@ -132,10 +133,7 @@ export function trackEvent(event: AnalyticsEvent, data: TrackData = {}): void {
       source: getSource(),
       path: window.location.pathname,
       productId: data.productId,
-      value:
-        typeof data.value === "number" && Number.isFinite(data.value)
-          ? Number(data.value.toFixed(2))
-          : undefined,
+      valueCents: isCents(data.valueCents) ? data.valueCents : undefined,
       props: { ...(data.props ?? {}), device: device() },
     });
 

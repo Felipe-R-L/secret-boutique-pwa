@@ -10,7 +10,7 @@ export default async function AdminReceptionPage() {
 
   const { data: products } = await supabase
     .from("products")
-    .select("id,name,price,stock_quantity,in_stock,image,image_url,images,variants")
+    .select("id,name,price_cents,stock_quantity,in_stock,image,image_url,images,variants")
     .order("name", { ascending: true });
 
   const productOptions = (products ?? []).map((p) => {
@@ -21,14 +21,14 @@ export default async function AdminReceptionPage() {
     return {
       id: p.id,
       name: p.name,
-      price: Number(p.price),
+      price_cents: p.price_cents,
       stock_quantity: p.stock_quantity ?? 0,
       in_stock: p.in_stock !== false,
       imageUrl: p.image_url ?? p.image ?? firstImage ?? null,
       variants: parsePersistedProductVariants(p.variants).map((variant) => ({
         id: variant.id,
         label: variant.label,
-        price: variant.price,
+        price_cents: variant.price_cents,
         stock_quantity: variant.stock_quantity,
         in_stock: variant.in_stock,
       })),

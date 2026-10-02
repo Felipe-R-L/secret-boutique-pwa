@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import { Plus, Star, Tags } from "lucide-react";
@@ -21,7 +22,8 @@ import { updateStoreCategories } from "@/lib/actions/admin";
 export type AdminProductCard = {
   id: string;
   name: string;
-  price: number;
+  /** Centavos. */
+  priceCents: number;
   description: string;
   curatorship?: string;
   category: string;
@@ -36,7 +38,8 @@ export type AdminProductCard = {
     id: string;
     sku: string;
     label: string;
-    price: number;
+    /** Centavos. */
+    priceCents: number;
     stockQuantity: number;
     inStock: boolean;
     isDefault?: boolean;
@@ -247,7 +250,7 @@ export function ProductsAdminPanel({
 
               <div className="flex items-center justify-between">
                 <strong className="text-sm">
-                  R$ {product.price.toFixed(2)}
+                  {formatCents(product.priceCents)}
                 </strong>
                 <div className="flex items-center gap-2 text-xs">
                   {product.variants.length > 0 && (
@@ -302,7 +305,7 @@ export function ProductsAdminPanel({
                       initialValue={{
                         productId: product.id,
                         name: product.name,
-                        price: product.price,
+                        priceCents: product.priceCents,
                         category: product.category,
                         description: product.description,
                         curatorship: product.curatorship ?? "",

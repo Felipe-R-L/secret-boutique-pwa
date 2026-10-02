@@ -23,7 +23,7 @@ export async function sendVoucherEmail(orderId: string) {
   const { data: order, error } = await supabase
     .from('orders')
     .select(
-      'id,customer_name,customer_email,total_amount,status,pickup_code,delivery_method,room_number',
+      'id,customer_name,customer_email,total_cents,status,pickup_code,delivery_method,room_number',
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -46,7 +46,7 @@ export async function sendVoucherEmail(orderId: string) {
       orderId: order.id,
       pickupCode: order.pickup_code ?? order.id.slice(0, 8),
       roomNumber: order.room_number,
-      totalAmount: Number(order.total_amount),
+      totalCents: order.total_cents,
     }),
   );
 

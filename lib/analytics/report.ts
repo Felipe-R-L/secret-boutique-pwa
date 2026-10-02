@@ -1,4 +1,5 @@
 import "server-only";
+import { formatCents } from "@/lib/money";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   TRAFFIC_SOURCE_LABELS,
@@ -33,7 +34,7 @@ type EventRow = {
   event: string;
   source: string | null;
   product_id: string | null;
-  value: number | null;
+  value_cents: number | null;
   props: Record<string, unknown> | null;
   created_at: string;
 };
@@ -69,7 +70,8 @@ export type AnalyticsReport = {
     sessions: number;
     orders: number;
     conversion: number | null;
-    avgTicket: number | null;
+    /** Centavos. */
+    avgTicketCents: number | null;
   };
   funnel: Array<{ label: string; visitors: number }>;
   dotPlot: { rows: DotPlotRow[]; totalVisitors: number };
@@ -88,7 +90,8 @@ export type AnalyticsReport = {
   products: Array<{
     productId: string;
     name: string;
-    price: number | null;
+    /** Centavos. */
+    priceCents: number | null;
     viewers: number;
     adders: number;
     removals: number;
@@ -135,12 +138,6 @@ function formatPct(value: number | null): string {
   return `${(value * 100).toFixed(value < 0.1 ? 1 : 0).replace(".", ",")}%`;
 }
 
-function brl(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
 
 async function fetchEvents(sinceIso: string): Promise<EventRow[]> {
   const supabase = createServiceRoleClient();
@@ -148,7 +145,7 @@ async function fetchEvents(sinceIso: string): Promise<EventRow[]> {
   for (let from = 0; from < MAX_EVENTS; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from("analytics_events")
-      .select("visitor_id,event,source,product_id,value,props,created_at")
+      .select("visitor_id,session_id,event,source,product_id,value_cents,props,created_at")
       .gte("created_at", sinceIso)
       .order("created_at", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
@@ -176,17 +173,17 @@ export async function buildAnalyticsReport(
     fetchEvents(sinceIso),
     supabase
       .from("orders")
-      .select("total_amount,status")
+      .select("total_cents,status")
       .gte("created_at", sinceIso)
       .not("status", "in", "(CANCELLED,EXPIRED)"),
-    supabase.from("products").select("id,name,price"),
+    supabase.from("products").select("id,name,price_cents"),
   ]);
 
   const orders = ordersResult.data ?? [];
   const productInfo = new Map(
     (productsResult.data ?? []).map((p) => [
       p.id as string,
-      { name: p.name as string, price: Number(p.price) },
+      { name: p.name as string, priceCents: p.price_cents as number },
     ]),
   );
 
@@ -201,7 +198,7 @@ export async function buildAnalyticsReport(
     sawTrustPage: boolean;
     choseSfw: boolean;
     pixChosen: boolean;
-    cartValue: number;
+    cartValueCents: number;
   };
   const visitors = new Map<string, VisitorAgg>();
   const sessions = new Set<string>();
@@ -229,7 +226,7 @@ export async function buildAnalyticsReport(
         sawTrustPage: false,
         choseSfw: false,
         pixChosen: false,
-        cartValue: 0,
+        cartValueCents: 0,
       };
       visitors.set(row.visitor_id, agg);
     }
@@ -249,8 +246,8 @@ export async function buildAnalyticsReport(
     if (row.event === "payment_selected" && row.props?.method === "PIX") {
       agg.pixChosen = true;
     }
-    if (row.event === "cart_view" && row.value) {
-      agg.cartValue = Number(row.value);
+    if (row.event === "cart_view" && row.value_cents) {
+      agg.cartValueCents = row.value_cents;
     }
 
     if (row.product_id) {
@@ -281,7 +278,7 @@ export async function buildAnalyticsReport(
 
   const buyers = all.filter((v) => v.maxStage === 5);
   const orderCount = orders.length;
-  const orderTotal = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+  const orderTotalCents = orders.reduce((sum, o) => sum + o.total_cents, 0);
 
   // ---- dot plot: visitantes mais recentes no topo (pela 1ª visita) ----
   const dotRows: DotPlotRow[] = [...visitors.entries()]
@@ -325,7 +322,7 @@ export async function buildAnalyticsReport(
     .map((productId) => ({
       productId,
       name: productInfo.get(productId)?.name ?? "Produto removido",
-      price: productInfo.get(productId)?.price ?? null,
+      priceCents: productInfo.get(productId)?.priceCents ?? null,
       viewers: productViewers.get(productId)?.size ?? 0,
       adders: productAdders.get(productId)?.size ?? 0,
       removals: productRemovals.get(productId) ?? 0,
@@ -388,7 +385,7 @@ export async function buildAnalyticsReport(
     0,
   );
   const removalRate = pct(totalRemovals, totalAdds);
-  const cartViewers = all.filter((v) => v.cartValue > 0);
+  const cartViewers = all.filter((v) => v.cartValueCents > 0);
   const cartAbandoners = cartViewers.filter((v) => v.maxStage < 3);
   const cartAbandonRate = pct(cartAbandoners.length, cartViewers.length);
   const lowAddProducts = products.filter(
@@ -431,9 +428,11 @@ export async function buildAnalyticsReport(
               : null,
             cartViewers.length >= 5
               ? ev(
-                  `${formatPct(cartAbandonRate)} viram o carrinho e não abriram o checkout, com carrinho médio de ${brl(
-                    cartViewers.reduce((s, v) => s + v.cartValue, 0) /
-                      cartViewers.length,
+                  `${formatPct(cartAbandonRate)} viram o carrinho e não abriram o checkout, com carrinho médio de ${formatCents(
+                    Math.round(
+                      cartViewers.reduce((s, v) => s + v.cartValueCents, 0) /
+                        cartViewers.length,
+                    ),
                   )} (alerta a partir de 60%)`,
                   cartAbandon,
                 )
@@ -559,7 +558,8 @@ export async function buildAnalyticsReport(
       sessions: sessions.size,
       orders: orderCount,
       conversion: pct(buyers.length, visitorCount),
-      avgTicket: orderCount > 0 ? orderTotal / orderCount : null,
+      avgTicketCents:
+        orderCount > 0 ? Math.round(orderTotalCents / orderCount) : null,
     },
     funnel,
     dotPlot: { rows: dotRows, totalVisitors: visitorCount },

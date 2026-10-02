@@ -1,10 +1,11 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import Image from "next/image";
 import { Plus, Minus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  getCartItemUnitPrice,
+  getCartItemUnitPriceCents,
   useCartStore,
   CartItem as CartItemType,
 } from "@/lib/store/cart-store";
@@ -41,13 +42,6 @@ export function CartItem({ item }: CartItemProps) {
     });
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
-  };
-
   return (
     <div className="flex gap-3 rounded-xl border border-border bg-card p-3">
       <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-muted">
@@ -71,7 +65,7 @@ export function CartItem({ item }: CartItemProps) {
             </p>
           )}
           <p className="text-sm font-semibold text-foreground">
-            {formatPrice(getCartItemUnitPrice(item))}
+            {formatCents(getCartItemUnitPriceCents(item))}
           </p>
         </div>
 

@@ -1,3 +1,4 @@
+import { formatCents } from '@/lib/money';
 import {
   Body,
   Container,
@@ -17,7 +18,8 @@ type VoucherEmailProps = {
   deliveryMethod: 'MOTEL_PICKUP' | 'ROOM_DELIVERY';
   pickupCode?: string | null;
   roomNumber?: string | null;
-  totalAmount: number;
+  /** Centavos. */
+  totalCents: number;
 };
 
 export function VoucherEmail({
@@ -26,12 +28,9 @@ export function VoucherEmail({
   orderId,
   pickupCode,
   roomNumber,
-  totalAmount,
+  totalCents,
 }: VoucherEmailProps) {
-  const formattedTotal = new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(totalAmount);
+  const formattedTotal = formatCents(totalCents);
   const isRoomDelivery = deliveryMethod === 'ROOM_DELIVERY';
   const previewText = isRoomDelivery
     ? 'Pagamento confirmado — vamos entregar seu pedido no quarto'

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@/lib/money";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { ArrowRight, Sparkles } from "lucide-react";
@@ -29,13 +30,6 @@ interface HeroSectionProps {
 }
 
 const ROTATE_MS = 5000;
-
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
 
 export function HeroSection({
   onProductSelect,
@@ -238,7 +232,7 @@ export function HeroSection({
                               {product.name}
                             </h2>
                             <p className="shrink-0 font-sans text-2xl font-bold text-foreground md:text-3xl">
-                              {formatBRL(product.price)}
+                              {formatCents(product.price_cents)}
                             </p>
                           </div>
                         </div>
@@ -287,7 +281,7 @@ export function HeroSection({
                       {small1.name}
                     </p>
                     <p className="font-sans text-sm font-semibold text-foreground">
-                      {formatBRL(small1.price)}
+                      {formatCents(small1.price_cents)}
                     </p>
                   </div>
                 </div>
@@ -319,7 +313,7 @@ export function HeroSection({
                       {small2.name}
                     </p>
                     <p className="font-sans text-sm font-semibold text-foreground">
-                      {formatBRL(small2.price)}
+                      {formatCents(small2.price_cents)}
                     </p>
                   </div>
                 </div>

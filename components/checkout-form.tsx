@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents, parseBrlToCents } from "@/lib/money";
 import React from "react";
 
 import { useEffect, useRef, useState } from "react";
@@ -32,7 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart-store";
 import { initializeCheckout } from "@/lib/actions/checkout";
-import { HOME_DELIVERY_FEE } from "@/lib/schemas";
+import { HOME_DELIVERY_FEE_CENTS } from "@/lib/schemas";
 import { useOrderHistoryStore } from "@/lib/store/order-history-store";
 import { fetchAddressByCep, formatCep } from "@/lib/viacep";
 import { track } from "@vercel/analytics";
@@ -66,10 +67,9 @@ const DELIVERY_OPTIONS: Array<{
   {
     method: "HOME_DELIVERY",
     title: "Entrega a domicílio",
-    description: `Entrega no seu endereço (+ ${new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(HOME_DELIVERY_FEE)} de frete).`,
+    description: `Entrega no seu endereço (+ ${formatCents(
+      HOME_DELIVERY_FEE_CENTS,
+    )} de frete).`,
     icon: Home,
   },
 ];
@@ -99,13 +99,6 @@ const PAYMENT_OPTIONS: Array<{
     icon: QrCode,
   },
 ];
-
-function parseBrl(value: string): number | null {
-  const normalized = value.replace(/[^\d,]/g, "").replace(",", ".");
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
 
 function formatCpf(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -162,28 +155,21 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
-  const { getTotal, clearCart, items } = useCartStore();
+  const { getTotalCents, clearCart, items } = useCartStore();
   const addOrderToHistory = useOrderHistoryStore((s) => s.addOrder);
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(price);
-  };
 
   const isHome = deliveryMethod === "HOME_DELIVERY";
   const isRoom = deliveryMethod === "ROOM_DELIVERY";
-  const deliveryFee = isHome ? HOME_DELIVERY_FEE : 0;
-  const orderTotal = getTotal() + deliveryFee;
+  const deliveryFeeCents = isHome ? HOME_DELIVERY_FEE_CENTS : 0;
+  const orderTotalCents = getTotalCents() + deliveryFeeCents;
   // Entrega a domicílio só aceita Pix.
   const effectivePayment: PaymentMethod = isHome ? "PIX" : paymentMethod;
   const isPix = effectivePayment === "PIX";
-  const cashChangeValue = parseBrl(cashChangeFor);
+  const cashChangeCents = parseBrlToCents(cashChangeFor);
   const cashChangeInvalid =
     effectivePayment === "CASH" &&
-    cashChangeValue !== null &&
-    cashChangeValue < orderTotal;
+    cashChangeCents !== null &&
+    cashChangeCents < orderTotalCents;
   const cepDigitsOnly = cep.replace(/\D/g, "");
 
   const addressComplete =
@@ -260,8 +246,8 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     if (effectivePayment === "PIX") return "Pix (pagamento online)";
     const where = isRoom ? "na entrega" : "na retirada";
     if (effectivePayment === "CARD") return `Cartão ${where}`;
-    return cashChangeValue
-      ? `Dinheiro ${where} — troco para ${formatPrice(cashChangeValue)}`
+    return cashChangeCents
+      ? `Dinheiro ${where} — troco para ${formatCents(cashChangeCents)}`
       : `Dinheiro ${where} — sem troco`;
   })();
 
@@ -282,7 +268,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     setIsSubmitting(true);
     track("begin_checkout", {
       items: items.length,
-      total: orderTotal,
+      totalCents: orderTotalCents,
       payment: effectivePayment,
     });
 
@@ -308,9 +294,9 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
       deliveryState: isHome ? uf.trim().toUpperCase() : undefined,
       ...pixPayer,
       paymentMethod: effectivePayment,
-      cashChangeFor:
-        effectivePayment === "CASH" && cashChangeValue
-          ? cashChangeValue
+      cashChangeForCents:
+        effectivePayment === "CASH" && cashChangeCents
+          ? cashChangeCents
           : undefined,
       items: items.map((item) => ({
         productId: item.product.id,
@@ -330,7 +316,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     }
 
     trackEvent("order_created", {
-      value: result.totalAmount,
+      valueCents: result.totalCents,
       props: { payment: effectivePayment, delivery: deliveryMethod },
     });
 
@@ -340,7 +326,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
         orderId: result.orderId,
         pickupCode: result.pickupCode,
         email: "",
-        total: result.totalAmount,
+        totalCents: result.totalCents,
         date: new Date().toISOString(),
         status: "PENDING",
         paymentMethod: result.paymentMethod,
@@ -769,7 +755,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
                 id="cash-change"
                 type="text"
                 inputMode="decimal"
-                placeholder={`Ex.: ${formatPrice(Math.ceil(orderTotal / 50) * 50 || 50)}`}
+                placeholder={`Ex.: ${formatCents(Math.ceil(orderTotalCents / 5000) * 5000 || 5000)}`}
                 value={cashChangeFor}
                 onChange={(e) => setCashChangeFor(e.target.value)}
                 className={cn(
@@ -780,7 +766,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
               {cashChangeInvalid ? (
                 <p className="flex items-center gap-1 text-xs text-destructive">
                   <AlertCircle className="size-3" />O valor precisa ser maior
-                  que o total ({formatPrice(orderTotal)}).
+                  que o total ({formatCents(orderTotalCents)}).
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
@@ -983,17 +969,17 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
           <div className="space-y-3 border-t border-border pt-4">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Subtotal</span>
-              <span>{formatPrice(getTotal())}</span>
+              <span>{formatCents(getTotalCents())}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Frete</span>
               <span>
-                {deliveryFee > 0 ? formatPrice(deliveryFee) : "Grátis"}
+                {deliveryFeeCents > 0 ? formatCents(deliveryFeeCents) : "Grátis"}
               </span>
             </div>
             <div className="flex items-center justify-between text-lg font-semibold">
               <span>Total</span>
-              <span>{formatPrice(orderTotal)}</span>
+              <span>{formatCents(orderTotalCents)}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
