@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
+import { DELIVERY_AREA_LABEL } from "@/lib/delivery-zones";
 
 export const metadata = {
   title: "Como Funciona a Retirada Anônima | The Secret Boutique",
@@ -49,9 +50,9 @@ const steps = [
   {
     icon: Package,
     number: "04",
-    title: "Retire no Dallas Motel",
+    title: "Retire ou receba em casa",
     description:
-      "Apresente apenas o código no Dallas Motel em Pitangueiras. Embalagem neutra, sem identificação.",
+      `Apresente apenas o código no Dallas Motel em Pitangueiras — ou receba em casa por motoboy em ${DELIVERY_AREA_LABEL}. Embalagem neutra, sem identificação.`,
     color: "bg-pastel-peach",
   },
 ];

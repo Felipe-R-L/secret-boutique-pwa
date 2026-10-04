@@ -29,10 +29,6 @@ export function isInPersonPayment(method: string | null | undefined) {
 // Valores monetários são sempre centavos inteiros (ver lib/money.ts).
 const centsSchema = z.coerce.number().int();
 
-// Taxa fixa de entrega a domicílio, em centavos. Fonte da verdade
-// compartilhada entre o cálculo server-side (checkout) e o formulário.
-export const HOME_DELIVERY_FEE_CENTS = 500;
-
 export const upsertAdminUserSchema = z
   .object({
     id: z.string().uuid(),

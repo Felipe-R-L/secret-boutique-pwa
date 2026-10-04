@@ -2,6 +2,7 @@ import { Header } from '@/components/header';
 import { Footer } from '@/components/footer';
 import { Lock } from 'lucide-react';
 import Link from 'next/link';
+import { DELIVERY_AREA_LABEL } from '@/lib/delivery-zones';
 
 export const metadata = {
   title: 'Política de Privacidade | The Secret Boutique',
@@ -16,13 +17,13 @@ const sections = [
   {
     title: '1. Quem somos',
     body: [
-      'A The Secret Boutique é uma loja online de produtos de bem-estar sexual e autocuidado, com retirada presencial no JR Dallas Motel, em Pitangueiras/SP. Para fins da Lei Geral de Proteção de Dados (LGPD, Lei nº 13.709/2018), somos a controladora dos dados descritos nesta política.',
+      `A The Secret Boutique é uma loja online de produtos de bem-estar sexual e autocuidado, com retirada presencial no JR Dallas Motel, em Pitangueiras/SP, e entrega por motoboy em ${DELIVERY_AREA_LABEL}. Para fins da Lei Geral de Proteção de Dados (LGPD, Lei nº 13.709/2018), somos a controladora dos dados descritos nesta política.`,
     ],
   },
   {
     title: '2. Quais dados coletamos e para quê',
     body: [
-      'Dados do pedido — nome, email, número do quarto (apenas se você escolher entrega no quarto), itens comprados e código de retirada. Usamos essas informações exclusivamente para processar o seu pedido, enviar o comprovante com o código de retirada por email e viabilizar a retirada. Base legal: execução de contrato.',
+      'Dados do pedido — nome, email, número do quarto (apenas se você escolher entrega no quarto), endereço de entrega (apenas se você escolher entrega por motoboy), itens comprados e código de retirada. Usamos essas informações exclusivamente para processar o seu pedido, enviar o comprovante com o código de retirada por email e viabilizar a retirada ou a entrega. Base legal: execução de contrato.',
       'Dados de pagamento — nome completo, CPF e email são exigidos pelo Banco Central para pagamentos via PIX e são transmitidos diretamente ao Mercado Pago, que processa o pagamento. O CPF não é armazenado em nossos sistemas. O tratamento desses dados pelo Mercado Pago segue a política de privacidade deles.',
       'Avaliações anônimas — as avaliações de produtos não pedem nem exibem nenhuma identificação. Para impedir spam e abuso, guardamos apenas um identificador técnico irreversível (hash criptográfico do endereço IP), que não permite identificar você. Base legal: legítimo interesse.',
       'Métricas de uso — usamos o Vercel Analytics, uma ferramenta de métricas sem cookies que coleta dados agregados e anônimos (como páginas visitadas), sem identificar visitantes individualmente.',

@@ -1,4 +1,5 @@
-import { EyeOff, Package, CreditCard } from "lucide-react";
+import { Bike, EyeOff, Package, CreditCard } from "lucide-react";
+import { DELIVERY_AREA_LABEL } from "@/lib/delivery-zones";
 
 const benefits = [
   {
@@ -19,6 +20,12 @@ const benefits = [
     description: "Cartão ou dinheiro no quarto — ou Pix na hora.",
     iconBg: "bg-pastel-sage/30",
   },
+  {
+    icon: Bike,
+    title: "Entrega por motoboy",
+    description: `Em casa, em ${DELIVERY_AREA_LABEL}.`,
+    iconBg: "bg-pastel-peach/30",
+  },
 ];
 
 export function BenefitsStrip() {
@@ -27,7 +34,7 @@ export function BenefitsStrip() {
       aria-label="Benefícios da loja"
       className="relative border-y border-border/40 bg-card/60"
     >
-      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 sm:grid-cols-3 md:px-6 md:py-6">
+      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 sm:grid-cols-2 lg:grid-cols-4 md:px-6 md:py-6">
         {benefits.map((benefit) => (
           <div key={benefit.title} className="flex items-center gap-3">
             <div

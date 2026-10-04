@@ -1,11 +1,13 @@
 "use server";
 
-import { centsToDecimalString } from "@/lib/money";
+import { centsToDecimalString, formatCents } from "@/lib/money";
 import {
-  initializeCheckoutSchema,
-  HOME_DELIVERY_FEE_CENTS,
-  isInPersonPayment,
-} from "@/lib/schemas";
+  DELIVERY_AREA_LABEL,
+  MIN_HOME_DELIVERY_SUBTOTAL_CENTS,
+  deliveryFeeCents as feeForZone,
+  findDeliveryZone,
+} from "@/lib/delivery-zones";
+import { initializeCheckoutSchema, isInPersonPayment } from "@/lib/schemas";
 import {
   createPixOrder,
   extractPixData,
@@ -124,9 +126,28 @@ export async function initializeCheckout(
       (selectedVariant?.price_cents ?? product.price_cents) * item.quantity;
   }
 
-  // Taxa fixa para entrega a domicílio; retirada/quarto não têm frete.
-  const deliveryFeeCents =
-    parsed.data.deliveryMethod === "HOME_DELIVERY" ? HOME_DELIVERY_FEE_CENTS : 0;
+  // Entrega a domicílio: frete pela cidade do CEP; retirada/quarto não têm
+  // frete. CEP fora das cidades atendidas pelo motoboy é recusado.
+  const isHomeDelivery = parsed.data.deliveryMethod === "HOME_DELIVERY";
+  const deliveryZone = isHomeDelivery
+    ? findDeliveryZone(parsed.data.deliveryCep)
+    : null;
+  if (isHomeDelivery && !deliveryZone) {
+    return {
+      ok: false,
+      error: `Ainda não entregamos nesse CEP. A entrega por motoboy atende ${DELIVERY_AREA_LABEL}.`,
+    };
+  }
+  if (isHomeDelivery && totalCents < MIN_HOME_DELIVERY_SUBTOTAL_CENTS) {
+    return {
+      ok: false,
+      error: `O pedido mínimo para entrega por motoboy é ${formatCents(MIN_HOME_DELIVERY_SUBTOTAL_CENTS)}.`,
+    };
+  }
+  // Até aqui totalCents é só o subtotal dos produtos.
+  const deliveryFeeCents = deliveryZone
+    ? feeForZone(deliveryZone, totalCents)
+    : 0;
   totalCents += deliveryFeeCents;
 
   const paymentMethod = parsed.data.paymentMethod;
@@ -180,8 +201,6 @@ export async function initializeCheckout(
     retries++;
   }
 
-  const isHomeDelivery = parsed.data.deliveryMethod === "HOME_DELIVERY";
-
   // Pagamento presencial não pede nome: identifica o pedido pelo quarto.
   const customerName =
     parsed.data.customerName?.trim() ||
@@ -208,12 +227,10 @@ export async function initializeCheckout(
     delivery_neighborhood: isHomeDelivery
       ? (parsed.data.deliveryNeighborhood?.trim() ?? null)
       : null,
-    delivery_city: isHomeDelivery
-      ? (parsed.data.deliveryCity?.trim() ?? null)
-      : null,
-    delivery_state: isHomeDelivery
-      ? (parsed.data.deliveryState?.trim().toUpperCase() ?? null)
-      : null,
+    // Cidade/UF vêm da faixa de CEP, não do que foi digitado: é o que
+    // define o frete e para onde o motoboy vai.
+    delivery_city: deliveryZone?.city ?? null,
+    delivery_state: deliveryZone?.state ?? null,
     payment_method: paymentMethod,
     cash_change_for_cents:
       paymentMethod === "CASH" ? (parsed.data.cashChangeForCents ?? null) : null,

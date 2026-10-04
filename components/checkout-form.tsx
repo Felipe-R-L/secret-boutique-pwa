@@ -33,7 +33,13 @@ import {
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart-store";
 import { initializeCheckout } from "@/lib/actions/checkout";
-import { HOME_DELIVERY_FEE_CENTS } from "@/lib/schemas";
+import {
+  DELIVERY_AREA_LABEL,
+  FREE_SHIPPING_ZONE,
+  MIN_HOME_DELIVERY_SUBTOTAL_CENTS,
+  deliveryFeeCents as feeForZone,
+  findDeliveryZone,
+} from "@/lib/delivery-zones";
 import { useOrderHistoryStore } from "@/lib/store/order-history-store";
 import { fetchAddressByCep, formatCep } from "@/lib/viacep";
 import { track } from "@vercel/analytics";
@@ -66,10 +72,16 @@ const DELIVERY_OPTIONS: Array<{
   },
   {
     method: "HOME_DELIVERY",
-    title: "Entrega a domicílio",
-    description: `Entrega no seu endereço (+ ${formatCents(
-      HOME_DELIVERY_FEE_CENTS,
-    )} de frete).`,
+    title: "Entrega por motoboy",
+    description: `No seu endereço em ${DELIVERY_AREA_LABEL}. Pedido mínimo de ${formatCents(
+      MIN_HOME_DELIVERY_SUBTOTAL_CENTS,
+    )}${
+      FREE_SHIPPING_ZONE?.freeShippingFromCents !== undefined
+        ? `; frete grátis em ${FREE_SHIPPING_ZONE.city} a partir de ${formatCents(
+            FREE_SHIPPING_ZONE.freeShippingFromCents,
+          )}`
+        : ""
+    }.`,
     icon: Home,
   },
 ];
@@ -160,8 +172,16 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
   const isHome = deliveryMethod === "HOME_DELIVERY";
   const isRoom = deliveryMethod === "ROOM_DELIVERY";
-  const deliveryFeeCents = isHome ? HOME_DELIVERY_FEE_CENTS : 0;
-  const orderTotalCents = getTotalCents() + deliveryFeeCents;
+  const cepDigitsOnly = cep.replace(/\D/g, "");
+  const deliveryZone = isHome ? findDeliveryZone(cepDigitsOnly) : null;
+  const cepOutsideArea = isHome && cepDigitsOnly.length === 8 && !deliveryZone;
+  const subtotalCents = getTotalCents();
+  const belowHomeMinimum =
+    isHome && subtotalCents < MIN_HOME_DELIVERY_SUBTOTAL_CENTS;
+  const deliveryFeeCents = deliveryZone
+    ? feeForZone(deliveryZone, subtotalCents)
+    : 0;
+  const orderTotalCents = subtotalCents + deliveryFeeCents;
   // Entrega a domicílio só aceita Pix.
   const effectivePayment: PaymentMethod = isHome ? "PIX" : paymentMethod;
   const isPix = effectivePayment === "PIX";
@@ -170,10 +190,10 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
     effectivePayment === "CASH" &&
     cashChangeCents !== null &&
     cashChangeCents < orderTotalCents;
-  const cepDigitsOnly = cep.replace(/\D/g, "");
 
   const addressComplete =
-    cepDigitsOnly.length === 8 &&
+    deliveryZone !== null &&
+    !belowHomeMinimum &&
     street.trim().length > 0 &&
     addressNumber.trim().length > 0 &&
     neighborhood.trim().length > 0 &&
@@ -238,7 +258,11 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
   const deliveryLabel = (() => {
     if (isRoom) return `Entrega no Quarto (${roomNumber.trim()})`;
-    if (isHome) return "Entrega a domicílio";
+    if (isHome) {
+      return deliveryZone
+        ? `Entrega por motoboy (${deliveryZone.city})`
+        : "Entrega por motoboy";
+    }
     return "Retirar na recepção";
   })();
 
@@ -501,10 +525,37 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
                     <Loader2 className="absolute right-3 top-3.5 size-5 animate-spin text-muted-foreground" />
                   )}
                 </div>
-                {cepError && (
+                {cepOutsideArea ? (
+                  <p className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="size-3 shrink-0" />
+                    Ainda não entregamos nesse CEP. O motoboy atende{" "}
+                    {DELIVERY_AREA_LABEL}.
+                  </p>
+                ) : cepError ? (
                   <p className="flex items-center gap-1 text-xs text-destructive">
                     <AlertCircle className="size-3" />
                     {cepError}
+                  </p>
+                ) : deliveryZone ? (
+                  <p className="text-xs text-muted-foreground">
+                    Frete para {deliveryZone.city}:{" "}
+                    <strong className="text-foreground">
+                      {deliveryFeeCents > 0
+                        ? formatCents(deliveryFeeCents)
+                        : "grátis"}
+                    </strong>
+                    {deliveryFeeCents > 0 &&
+                      deliveryZone.freeShippingFromCents !== undefined &&
+                      ` (grátis a partir de ${formatCents(
+                        deliveryZone.freeShippingFromCents,
+                      )} em produtos)`}
+                  </p>
+                ) : null}
+                {belowHomeMinimum && (
+                  <p className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="size-3 shrink-0" />
+                    Pedido mínimo para entrega por motoboy:{" "}
+                    {formatCents(MIN_HOME_DELIVERY_SUBTOTAL_CENTS)} em produtos.
                   </p>
                 )}
               </div>
@@ -670,7 +721,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
 
           {isHome ? (
             <p className="rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground">
-              Entregas a domicílio são pagas online, via Pix.
+              Entregas por motoboy são pagas online, via Pix.
             </p>
           ) : (
             <div className="space-y-3">
@@ -946,7 +997,8 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
               <p className="text-xs text-muted-foreground">
                 {street.trim()}, {addressNumber.trim()}
                 {complement.trim() ? ` - ${complement.trim()}` : ""} —{" "}
-                {neighborhood.trim()}, {city.trim()}/{uf.trim().toUpperCase()} —
+                {neighborhood.trim()}, {deliveryZone?.city ?? city.trim()}/
+                {deliveryZone?.state ?? uf.trim().toUpperCase()} —
                 CEP {cep.trim()}
               </p>
             )}
@@ -969,7 +1021,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
           <div className="space-y-3 border-t border-border pt-4">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Subtotal</span>
-              <span>{formatCents(getTotalCents())}</span>
+              <span>{formatCents(subtotalCents)}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Frete</span>
