@@ -134,7 +134,7 @@ export async function upsertProduct(
     );
   }
 
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath("/admin/products");
   revalidatePath("/admin");
   return { ok: true as const };
@@ -171,7 +171,7 @@ export async function deleteProduct(input: unknown) {
     context,
   );
 
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath("/admin/products");
   revalidatePath("/admin");
   return { ok: true as const };
@@ -598,7 +598,7 @@ export async function importProducts(
   }
 
   if (report.inserted > 0) {
-    revalidatePath("/");
+    revalidatePath("/", "layout");
     revalidatePath("/admin/products");
     revalidatePath("/admin");
     revalidatePath("/admin/inventory");

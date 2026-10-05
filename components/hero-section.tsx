@@ -96,7 +96,7 @@ export function HeroSection({
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full bg-pastel-rose/30 px-4 py-2 text-sm font-medium text-accent-foreground">
                 <Sparkles className="size-4" />
-                <span>Novidades da Semana</span>
+                <span>Sex shop em Pitangueiras · entrega discreta</span>
               </div>
 
               <h1 className="font-sans text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl lg:text-5xl xl:text-6xl text-balance">
@@ -228,9 +228,9 @@ export function HeroSection({
                             Em destaque
                           </span>
                           <div className="flex items-end justify-between gap-3">
-                            <h2 className="line-clamp-2 font-sans text-xl font-semibold text-foreground md:text-2xl">
+                            <p className="line-clamp-2 font-sans text-xl font-semibold text-foreground md:text-2xl">
                               {product.name}
-                            </h2>
+                            </p>
                             <p className="shrink-0 font-sans text-2xl font-bold text-foreground md:text-3xl">
                               {formatCents(product.price_cents)}
                             </p>
@@ -245,11 +245,11 @@ export function HeroSection({
                   <>
                     <CarouselPrevious
                       aria-label="Destaque anterior"
-                      className="left-3 top-[38%] z-10 size-10 border-0 bg-background/75 text-foreground shadow-lg backdrop-blur-md hover:bg-background md:left-4"
+                      className="left-3 top-[38%] z-10 size-11 border-0 bg-background/75 text-foreground shadow-lg backdrop-blur-md hover:bg-background md:left-4"
                     />
                     <CarouselNext
                       aria-label="Próximo destaque"
-                      className="right-3 top-[38%] z-10 size-10 border-0 bg-background/75 text-foreground shadow-lg backdrop-blur-md hover:bg-background md:right-4"
+                      className="right-3 top-[38%] z-10 size-11 border-0 bg-background/75 text-foreground shadow-lg backdrop-blur-md hover:bg-background md:right-4"
                     />
                   </>
                 )}

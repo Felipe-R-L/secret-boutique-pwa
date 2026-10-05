@@ -20,7 +20,7 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Novo pedido";
   const options = {
     body: data.body || "Você recebeu um novo pedido.",
-    icon: "/icon.png",
+    icon: "/icon-192.png",
     badge: "/icon.png",
     tag: data.tag || "new-order",
     renotify: true,

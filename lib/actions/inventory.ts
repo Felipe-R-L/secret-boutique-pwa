@@ -60,7 +60,7 @@ export async function createStockEntry(input: unknown): Promise<ActionResult> {
     context,
   );
 
-  revalidatePath('/');
+  revalidatePath('/', 'layout');
   revalidatePath('/admin/inventory');
   revalidatePath('/admin/products');
   revalidatePath('/admin/dashboard');
@@ -132,7 +132,7 @@ export async function createStockAdjustment(
     context,
   );
 
-  revalidatePath('/');
+  revalidatePath('/', 'layout');
   revalidatePath('/admin/inventory');
   revalidatePath('/admin/products');
   revalidatePath('/admin/dashboard');

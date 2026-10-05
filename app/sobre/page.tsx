@@ -4,12 +4,14 @@ import { Lock, Heart, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
-  title: "Sobre Nós | The Secret Boutique",
+export const metadata = pageMetadata({
+  title: "Sobre Nós",
   description:
-    "Conheça a história da Secret Boutique, a sua boutique íntima. Autocuidado, produtos de beleza e bem-estar sexual com total privacidade no JR Dallas Motel em Pitangueiras.",
-};
+    "A Secret Boutique nasceu dentro do JR Dallas Motel, em Pitangueiras, para levar bem-estar sexual e autocuidado com privacidade e sem julgamentos. Conheça nossa história.",
+  path: "/sobre",
+});
 
 const values = [
   {
@@ -43,9 +45,9 @@ export default function SobrePage() {
       <main>
         {/* Hero */}
         <section className="relative overflow-hidden">
-          {/* Header background image (Unsplash — uso livre) */}
+          {/* Imagem de fundo (Unsplash, uso livre), servida pelo próprio site */}
           <Image
-            src="https://images.unsplash.com/photo-1617055407123-3d7130c1f940?w=1600&q=80&auto=format&fit=crop"
+            src="/images/hero-sobre.webp"
             alt=""
             fill
             priority

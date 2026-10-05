@@ -2,16 +2,17 @@ import { Header } from '@/components/header';
 import { Footer } from '@/components/footer';
 import { Lock } from 'lucide-react';
 import Link from 'next/link';
+import { pageMetadata } from '@/lib/seo';
+import { CONTACT_EMAIL } from '@/lib/site';
 import { DELIVERY_AREA_LABEL } from '@/lib/delivery-zones';
 
-export const metadata = {
-  title: 'Política de Privacidade | The Secret Boutique',
+export const metadata = pageMetadata({
+  title: 'Política de Privacidade',
   description:
     'Como a Secret Boutique trata seus dados: coletamos só o essencial, não usamos cookies de rastreamento e nunca vendemos suas informações.',
-};
+  path: '/privacidade',
+});
 
-// Canal de contato para solicitações de privacidade (LGPD art. 18).
-const CONTACT_EMAIL = 'contato@secret-boutique.com.br';
 
 const sections = [
   {

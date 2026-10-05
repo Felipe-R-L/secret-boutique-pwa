@@ -4,6 +4,13 @@ import { AdminNav } from "@/components/admin/admin-nav";
 import { AuditTracker } from "@/components/admin/audit-tracker";
 import { Button } from "@/components/ui/button";
 import { getAdminContext } from "@/lib/auth/admin";
+import type { Metadata } from "next";
+import { NO_INDEX } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "Painel",
+  robots: NO_INDEX,
+};
 
 export default async function AdminLayout({
   children,

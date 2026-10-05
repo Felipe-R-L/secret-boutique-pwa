@@ -5,8 +5,9 @@ export async function proxy(request: NextRequest) {
   return await updateSession(request);
 }
 
+// Sessão do Supabase só importa no painel e no login. Rodar em toda rota
+// pública fazia uma chamada ao Supabase por request e impedia o cache da
+// vitrine (home, produtos, categorias).
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/admin/:path*", "/auth/:path*"],
 };

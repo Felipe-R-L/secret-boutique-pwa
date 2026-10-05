@@ -2,6 +2,7 @@
 
 import { formatCents } from '@/lib/money';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Plus,
   Minus,
@@ -416,6 +417,14 @@ export function ProductDrawer({
                 <DrawerDescription className='font-sans text-3xl font-bold text-foreground'>
                   {formatCents(effectivePriceCents)}
                 </DrawerDescription>
+                {product.slug && (
+                  <Link
+                    href={`/produto/${product.slug}`}
+                    className='inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline'
+                  >
+                    Ver página do produto
+                  </Link>
+                )}
               </DrawerHeader>
 
               {productHasVariants && (

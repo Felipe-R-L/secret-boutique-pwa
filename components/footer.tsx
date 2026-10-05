@@ -1,6 +1,19 @@
 import Link from "next/link";
 import { Shield, Package, Lock, Heart, Instagram } from "lucide-react";
-import { INSTAGRAM_URL, INSTAGRAM_HANDLE, WHATSAPP_URL } from "@/lib/site-contact";
+import {
+  INSTAGRAM_URL,
+  INSTAGRAM_HANDLE,
+  WHATSAPP_NUMBER,
+  WHATSAPP_URL,
+} from "@/lib/site-contact";
+import { DELIVERY_ZONES } from "@/lib/delivery-zones";
+import { cityPath } from "@/lib/storefront-paths";
+import {
+  CONTACT_EMAIL,
+  PICKUP_PLACE_NAME,
+  STORE_ADDRESS,
+  STORE_HOURS_LABEL,
+} from "@/lib/site";
 import { TrackedLink } from "@/components/analytics/tracked-link";
 
 const trustBadges = [
@@ -50,6 +63,12 @@ function WhatsappGlyph({ className }: { className?: string }) {
   );
 }
 
+// "5516997118118" → "(16) 99711-8118"
+function formatWhatsapp(digits: string) {
+  const match = digits.match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+  return match ? `(${match[1]}) ${match[2]}-${match[3]}` : digits;
+}
+
 export function Footer() {
   return (
     <footer className="border-t border-border bg-card">
@@ -57,7 +76,7 @@ export function Footer() {
           quatro cartões altos — no celular ocupavam uma tela inteira. */}
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6 lg:py-10">
         <ul className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-          {trustBadges.map((badge) => (
+          {trustBadges.map(badge => (
             <li key={badge.title} className="flex items-center gap-3">
               <div
                 className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${badge.iconBg}`}
@@ -99,6 +118,27 @@ export function Footer() {
                 Bem-estar sexual com privacidade e sem julgamentos
               </p>
 
+              {/* Dados de contato visíveis: mesmos do Perfil no Google. */}
+              <address
+                className="mt-1 space-y-0.5 text-center text-xs not-italic text-muted-foreground md:text-left"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                <p>
+                  Retirada: {PICKUP_PLACE_NAME} · {STORE_ADDRESS.streetAddress},{" "}
+                  {STORE_ADDRESS.addressLocality}/{STORE_ADDRESS.addressRegion}
+                </p>
+                <p>Atendimento {STORE_HOURS_LABEL}</p>
+                <p>
+                  WhatsApp {formatWhatsapp(WHATSAPP_NUMBER)} ·{" "}
+                  <a
+                    href={`mailto:${CONTACT_EMAIL}`}
+                    className="underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    {CONTACT_EMAIL}
+                  </a>
+                </p>
+              </address>
+
               <div className="mt-2 flex items-center gap-3">
                 <TrackedLink
                   event="instagram_click"
@@ -125,18 +165,36 @@ export function Footer() {
               </div>
             </div>
 
-            <nav className="flex flex-wrap justify-center gap-x-4 md:gap-x-6">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="py-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
+            <div className="flex flex-col items-center gap-2 md:items-end">
+              <nav className="flex flex-wrap justify-center gap-x-4 md:gap-x-6">
+                {navLinks.map(link => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="py-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+              <nav
+                aria-label="Cidades com entrega"
+                className="flex flex-wrap items-center justify-center gap-x-4 text-sm text-muted-foreground md:justify-end"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                <span>Entregamos em</span>
+                {DELIVERY_ZONES.map(zone => (
+                  <Link
+                    key={zone.city}
+                    href={cityPath(zone.city)}
+                    className="py-3 transition-colors hover:text-foreground"
+                  >
+                    {zone.city}
+                  </Link>
+                ))}
+              </nav>
+            </div>
           </div>
         </div>
       </div>

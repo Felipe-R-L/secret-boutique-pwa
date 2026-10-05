@@ -42,6 +42,8 @@ export interface Product {
   in_stock?: boolean;
   is_featured?: boolean;
   is_adult?: boolean;
+  /** Caminho público do produto: /produto/{slug}. */
+  slug?: string;
   stock_quantity?: number;
   variants?: ProductVariant[];
 }

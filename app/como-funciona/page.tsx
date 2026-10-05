@@ -14,13 +14,20 @@ import {
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
-import { DELIVERY_AREA_LABEL } from "@/lib/delivery-zones";
+import { pageMetadata } from "@/lib/seo";
+import {
+  DELIVERY_AREA_LABEL,
+  MIN_HOME_DELIVERY_SUBTOTAL_CENTS,
+} from "@/lib/delivery-zones";
+import { formatCents } from "@/lib/money";
+import { STORE_HOURS_LABEL } from "@/lib/site";
 
-export const metadata = {
-  title: "Como Funciona a Retirada Anônima | The Secret Boutique",
+export const metadata = pageMetadata({
+  title: "Como Funciona a Compra Anônima",
   description:
-    "Entenda como funciona o processo de compra e retirada 100% anônima e discreta de produtos de sex shop e beleza no JR Dallas Motel, em Pitangueiras.",
-};
+    "Como comprar em sex shop sem se identificar: escolha sem cadastro, pague na entrega ou via Pix e retire só com o código no JR Dallas Motel, ou receba por motoboy.",
+  path: "/como-funciona",
+});
 
 const steps = [
   {
@@ -57,6 +64,33 @@ const steps = [
   },
 ];
 
+const faq = [
+  {
+    q: "Preciso criar conta ou informar documento?",
+    a: "Não. A compra é feita sem cadastro. Pagando no cartão ou em dinheiro na entrega, você não informa nenhum dado pessoal. Na retirada, basta o código do pedido.",
+  },
+  {
+    q: "Quais formas de pagamento vocês aceitam?",
+    a: "Na retirada ou entrega no quarto: cartão (crédito ou débito) ou dinheiro, na hora. Também dá para pagar via Pix no checkout. Para entrega em casa por motoboy, o pagamento é via Pix.",
+  },
+  {
+    q: "Em quais cidades vocês entregam?",
+    a: `Entregamos por motoboy em ${DELIVERY_AREA_LABEL}. O frete é calculado pelo CEP no checkout e o pedido mínimo para entrega é de ${formatCents(MIN_HOME_DELIVERY_SUBTOTAL_CENTS)}.`,
+  },
+  {
+    q: "A embalagem mostra o que tem dentro?",
+    a: "Não. Todos os pedidos saem em embalagem neutra, sem logotipo, nome da loja ou descrição do conteúdo.",
+  },
+  {
+    q: "Qual o horário de retirada?",
+    a: `A retirada no JR Dallas Motel funciona ${STORE_HOURS_LABEL}, inclusive fins de semana e feriados.`,
+  },
+  {
+    q: "Como acompanho meu pedido?",
+    a: "Pela página Meus Pedidos. O histórico fica salvo neste aparelho, sem conta e sem login, e mostra o status e o código de cada pedido.",
+  },
+];
+
 export default function ComoFuncionaPage() {
   return (
     <div className="min-h-screen bg-background">
@@ -65,9 +99,9 @@ export default function ComoFuncionaPage() {
       <main>
         {/* Hero */}
         <section className="relative overflow-hidden">
-          {/* Header background image (Unsplash — uso livre) */}
+          {/* Imagem de fundo (Unsplash, uso livre), servida pelo próprio site */}
           <Image
-            src="https://images.unsplash.com/photo-1748543668676-ea8241cb3886?w=1600&q=80&auto=format&fit=crop"
+            src="/images/hero-como-funciona.webp"
             alt=""
             fill
             priority
@@ -86,7 +120,7 @@ export default function ComoFuncionaPage() {
               <span>Privacidade Total</span>
             </div>
             <h1 className="font-sans text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl lg:text-5xl">
-              Como funciona a<br />
+              Como funciona a{" "}<br />
               <span className="text-primary">retirada anônima</span>
             </h1>
             <p
@@ -96,11 +130,15 @@ export default function ComoFuncionaPage() {
               Compre com total privacidade. Pedimos apenas o essencial — seu
               código é a única coisa que você precisa para retirar.
             </p>
+            <Button size="lg" className="mt-6 h-12 rounded-full px-6" asChild>
+              <Link href="/#catalog">Explorar Produtos</Link>
+            </Button>
           </div>
         </section>
 
         {/* Steps */}
         <section className="mx-auto max-w-5xl px-4 py-12 md:px-6 md:py-20">
+          <h2 className="sr-only">Passo a passo da compra</h2>
           <div className="grid gap-6 md:grid-cols-2 lg:gap-8">
             {steps.map((step) => (
               <div
@@ -204,9 +242,9 @@ export default function ComoFuncionaPage() {
           <div className="grid gap-4 md:grid-cols-3 md:gap-6">
             <div className="rounded-2xl bg-pastel-rose/20 p-6 text-center">
               <EyeOff className="mx-auto mb-3 size-8 text-foreground/60" />
-              <h4 className="mb-1 font-sans text-base font-semibold text-foreground">
+              <h3 className="mb-1 font-sans text-base font-semibold text-foreground">
                 Mínimo de dados
-              </h4>
+              </h3>
               <p
                 className="text-sm text-muted-foreground"
                 style={{ fontFamily: "Inter, sans-serif" }}
@@ -217,9 +255,9 @@ export default function ComoFuncionaPage() {
             </div>
             <div className="rounded-2xl bg-pastel-lavender/20 p-6 text-center">
               <KeyRound className="mx-auto mb-3 size-8 text-foreground/60" />
-              <h4 className="mb-1 font-sans text-base font-semibold text-foreground">
+              <h3 className="mb-1 font-sans text-base font-semibold text-foreground">
                 Código é único
-              </h4>
+              </h3>
               <p
                 className="text-sm text-muted-foreground"
                 style={{ fontFamily: "Inter, sans-serif" }}
@@ -230,9 +268,9 @@ export default function ComoFuncionaPage() {
             </div>
             <div className="rounded-2xl bg-pastel-sage/20 p-6 text-center">
               <Eye className="mx-auto mb-3 size-8 text-foreground/60" />
-              <h4 className="mb-1 font-sans text-base font-semibold text-foreground">
+              <h3 className="mb-1 font-sans text-base font-semibold text-foreground">
                 Embalagem neutra
-              </h4>
+              </h3>
               <p
                 className="text-sm text-muted-foreground"
                 style={{ fontFamily: "Inter, sans-serif" }}
@@ -243,12 +281,40 @@ export default function ComoFuncionaPage() {
           </div>
         </section>
 
+        {/* Perguntas frequentes — respostas curtas e autocontidas */}
+        <section
+          aria-labelledby="faq"
+          className="mx-auto max-w-3xl px-4 pb-12 md:px-6 md:pb-20"
+        >
+          <h2
+            id="faq"
+            className="mb-6 text-center font-sans text-2xl font-semibold text-foreground md:text-3xl"
+          >
+            Perguntas frequentes
+          </h2>
+          <div
+            className="divide-y divide-border rounded-3xl border border-border/60 bg-card"
+            style={{ fontFamily: "Inter, sans-serif" }}
+          >
+            {faq.map((item) => (
+              <details key={item.q} className="p-5">
+                <summary className="cursor-pointer font-medium text-foreground">
+                  {item.q}
+                </summary>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {item.a}
+                </p>
+              </details>
+            ))}
+          </div>
+        </section>
+
         {/* Dallas CTA */}
         <section className="border-t border-border/50 bg-card">
           <div className="mx-auto max-w-4xl px-4 py-12 text-center md:px-6 md:py-16">
-            <h3 className="mb-2 font-sans text-xl font-semibold text-foreground md:text-2xl">
+            <h2 className="mb-2 font-sans text-xl font-semibold text-foreground md:text-2xl">
               Dallas Motel — Pitangueiras, SP
-            </h3>
+            </h2>
             <p
               className="mx-auto mb-6 max-w-lg text-sm text-muted-foreground"
               style={{ fontFamily: "Inter, sans-serif" }}

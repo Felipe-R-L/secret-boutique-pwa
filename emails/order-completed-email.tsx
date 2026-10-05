@@ -43,7 +43,7 @@ export function OrderCompletedEmail({
           {/* Logo */}
           <Section style={logoSectionStyle}>
             <Img
-              src='https://secret-boutique-pwa.vercel.app/logo.png'
+              src='https://secret-boutique.com.br/logo.png'
               alt='The Secret Boutique'
               width='160'
               height='auto'
