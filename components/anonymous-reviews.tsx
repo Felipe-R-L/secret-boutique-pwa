@@ -99,13 +99,13 @@ export function AnonymousReviews({ productId }: AnonymousReviewsProps) {
       </header>
 
       <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-border p-3">
-        <div className="flex items-center gap-2">
+        <div className="-mx-3 flex items-center">
           {[1, 2, 3, 4, 5].map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setRating(value)}
-              className="rounded p-1"
+              className="rounded p-3"
               aria-label={`Dar nota ${value}`}
             >
               <Star
@@ -127,7 +127,7 @@ export function AnonymousReviews({ productId }: AnonymousReviewsProps) {
           className="min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
         />
 
-        <Button type="submit" size="sm" disabled={isPending}>
+        <Button type="submit" className="min-h-11" disabled={isPending}>
           {isPending ? "Enviando..." : "Deixar uma avaliação anônima"}
         </Button>
       </form>

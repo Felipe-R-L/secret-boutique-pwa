@@ -4,6 +4,13 @@ import { AdminNav } from "@/components/admin/admin-nav";
 import { AuditTracker } from "@/components/admin/audit-tracker";
 import { Button } from "@/components/ui/button";
 import { getAdminContext } from "@/lib/auth/admin";
+import type { Metadata } from "next";
+import { NO_INDEX } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "Painel",
+  robots: NO_INDEX,
+};
 
 export default async function AdminLayout({
   children,
@@ -17,9 +24,9 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background print:min-h-0 print:bg-white">
       <AuditTracker />
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 px-4 py-4 backdrop-blur md:px-6">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 px-4 py-4 backdrop-blur md:px-6 print:hidden">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold">Painel Administrativo</h1>
@@ -37,7 +44,9 @@ export default async function AdminLayout({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl p-4 md:p-6">{children}</main>
+      <main className="mx-auto w-full max-w-7xl p-4 md:p-6 print:max-w-none print:p-0">
+        {children}
+      </main>
     </div>
   );
 }

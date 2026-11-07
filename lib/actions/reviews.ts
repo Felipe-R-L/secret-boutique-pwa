@@ -86,6 +86,6 @@ export async function submitAnonymousReview(data: unknown) {
     return { ok: false as const, error: error.message };
   }
 
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   return { ok: true as const };
 }

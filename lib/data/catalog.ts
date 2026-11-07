@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { cache } from "react";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import type {
   Product,
@@ -6,6 +7,7 @@ import type {
   ProductVariantAttribute,
 } from "@/lib/store/cart-store";
 import { isCents } from "@/lib/money";
+import { slugify } from "@/lib/slug";
 
 const DEFAULT_HERO_TITLE = "Descubra o prazer do autocuidado";
 const DEFAULT_HERO_SUBTITLE =
@@ -129,8 +131,25 @@ function mapProduct(row: ProductRow): Product {
   };
 }
 
-export async function getCatalogData() {
-  const supabase = await createClient();
+// Slug pelo nome; nomes repetidos ganham o início do id para não colidir.
+function assignSlugs(products: Product[]): Product[] {
+  const counts = new Map<string, number>();
+  for (const product of products) {
+    const base = slugify(product.name) || "produto";
+    counts.set(base, (counts.get(base) ?? 0) + 1);
+  }
+
+  return products.map((product) => {
+    const base = slugify(product.name) || "produto";
+    const slug =
+      (counts.get(base) ?? 0) > 1 ? `${base}-${product.id.slice(0, 8)}` : base;
+    return { ...product, slug };
+  });
+}
+
+// cache(): generateMetadata e a página compartilham a mesma consulta.
+export const getCatalogData = cache(async () => {
+  const supabase = createPublicClient();
 
   let [productsResult, settingsResult] = await Promise.all([
     supabase
@@ -161,7 +180,7 @@ export async function getCatalogData() {
       })) as typeof productsResult;
   }
 
-  const products = (productsResult.data ?? []).map(mapProduct);
+  const products = assignSlugs((productsResult.data ?? []).map(mapProduct));
 
   const productIds = products.map((product) => product.id);
 
@@ -171,7 +190,10 @@ export async function getCatalogData() {
           .from("reviews")
           .select("product_id,rating")
           .in("product_id", productIds)
-      : Promise.resolve({ data: [], error: null }),
+      : Promise.resolve({
+          data: [] as { product_id: string; rating: number }[],
+          error: null,
+        }),
     supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
@@ -262,4 +284,10 @@ export async function getCatalogData() {
       heroSubtitle: settings?.hero_subtitle ?? DEFAULT_HERO_SUBTITLE,
     },
   };
+});
+
+export async function getProductBySlug(slug: string) {
+  const data = await getCatalogData();
+  const product = data.products.find((item) => item.slug === slug);
+  return product ? { product, data } : null;
 }

@@ -2,6 +2,7 @@
 
 import { formatCents } from "@/lib/money";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Plus,
   Minus,
@@ -413,6 +414,15 @@ export function ProductModal({
               >
                 {formatCents(effectivePriceCents)}
               </DialogDescription>
+
+              {product.slug && (
+                <Link
+                  href={`/produto/${product.slug}`}
+                  className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Ver página do produto
+                </Link>
+              )}
 
               {productHasVariants && !selectedVariant && (
                 <p className="text-sm text-muted-foreground">

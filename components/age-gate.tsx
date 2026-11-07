@@ -43,7 +43,8 @@ export function AgeGate() {
 
         <div className="mt-5 flex flex-col gap-2.5">
           <Button
-            className="h-12 rounded-full text-sm font-semibold"
+            autoFocus
+            className="h-auto min-h-12 whitespace-normal rounded-full py-3 text-sm font-semibold"
             onClick={() => {
               trackEvent("age_gate_choice", { props: { choice: "adult" } });
               setMode("adult");
@@ -54,7 +55,7 @@ export function AgeGate() {
           </Button>
           <Button
             variant="outline"
-            className="h-12 rounded-full text-sm font-semibold"
+            className="h-auto min-h-12 whitespace-normal rounded-full py-3 text-sm font-semibold"
             onClick={() => {
               trackEvent("age_gate_choice", { props: { choice: "sfw" } });
               setMode("sfw");
@@ -72,7 +73,7 @@ export function AgeGate() {
           Sua escolha fica só neste dispositivo. Sem cookies de rastreamento ·{" "}
           <Link
             href="/privacidade"
-            className="text-primary underline-offset-4 hover:underline"
+            className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline"
           >
             Privacidade
           </Link>

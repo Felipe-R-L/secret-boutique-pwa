@@ -209,7 +209,7 @@ export function Catalog({
                 <button
                   type="button"
                   onClick={() => setAgeMode("unset")}
-                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  className="min-h-11 px-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   Mudar catálogo

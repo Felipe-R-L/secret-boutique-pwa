@@ -13,6 +13,7 @@ import {
 } from "@/lib/product-images";
 import { hasProductVariants } from "@/lib/product-variants";
 import { showAddedToCartToast } from "@/components/cart-toast";
+import { productPath } from "@/lib/storefront-paths";
 
 interface ProductCardProps {
   product: Product;
@@ -25,6 +26,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
   const secondImage = getSecondaryProductImage(product);
   const hasSecondImage = Boolean(secondImage);
   const productHasVariants = hasProductVariants(product);
+  const href = productPath(product);
 
   // Urgência honesta: só para produtos sem variantes (o estoque por variante
   // é escolhido no detalhe) e com poucas unidades reais restantes.
@@ -114,7 +116,25 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
             className="line-clamp-2 text-sm font-medium leading-snug text-foreground sm:text-base"
             style={{ fontFamily: "Inter, sans-serif" }}
           >
-            {product.name}
+            {/* Link real para buscadores e "abrir em nova aba"; o clique
+                comum continua abrindo o detalhe rápido (modal/drawer). */}
+            {href ? (
+              <a
+                href={href}
+                tabIndex={-1}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) {
+                    e.stopPropagation();
+                    return;
+                  }
+                  e.preventDefault();
+                }}
+              >
+                {product.name}
+              </a>
+            ) : (
+              product.name
+            )}
           </h3>
           <p className="font-sans text-base font-semibold text-foreground sm:text-lg">
             {productHasVariants && (

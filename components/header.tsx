@@ -45,7 +45,7 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
-              className="size-10 rounded-full lg:hidden"
+              className="size-11 rounded-full lg:hidden"
               onClick={() => setMobileOpen(true)}
               aria-label="Abrir menu"
             >

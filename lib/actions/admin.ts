@@ -147,7 +147,7 @@ export async function updateStoreSettings(input: unknown) {
     context,
   );
 
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   revalidatePath("/admin/products");
@@ -207,7 +207,7 @@ export async function updateStoreCategories(input: unknown) {
     context,
   );
 
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   revalidatePath("/admin/products");

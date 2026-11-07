@@ -15,7 +15,7 @@ export function FilterPills({ categories, selected, onSelect }: FilterPillsProps
       <button
         onClick={() => onSelect(null)}
         className={cn(
-          'group flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 md:px-6 md:py-3',
+          'group flex min-h-11 shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 md:px-6 md:py-3',
           selected === null
             ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
             : 'bg-card text-foreground ring-1 ring-border hover:bg-pastel-rose/30 hover:ring-primary/20'
@@ -33,7 +33,7 @@ export function FilterPills({ categories, selected, onSelect }: FilterPillsProps
           key={category}
           onClick={() => onSelect(category)}
           className={cn(
-            'group flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 md:px-6 md:py-3',
+            'group flex min-h-11 shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 md:px-6 md:py-3',
             selected === category
               ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
               : 'bg-card text-foreground ring-1 ring-border hover:bg-pastel-lavender/30 hover:ring-primary/20'
