@@ -52,7 +52,7 @@ export const ROOM_KITS: RoomKit[] = [
     ],
   },
   {
-    rooms: ['10', '11', '14', '16', '17', '19', '22'],
+    rooms: ['10', '11', '14', '16', '17', '19', '21', '22'],
     productIds: [
       '1d3e9af0-40e4-469b-9b10-1f1be1a2dc4e', // Gel Hot Ice e Vibra (Xana Loka)
       'feb39001-9e1b-4624-8090-21ab8635a68f', // Melzinho Árabe do Prazer
