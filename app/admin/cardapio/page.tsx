@@ -22,9 +22,13 @@ const playfair = Playfair_Display({
 const inter = Inter({ subsets: ['latin'], variable: '--pm-font-text' });
 
 const FORMATS = {
-  a5: { page: 'A5', width: '148mm', height: '210mm' },
-  a4: { page: 'A4', width: '210mm', height: '297mm' },
+  a5: { width: 148, height: 210 },
+  a4: { width: 210, height: 297 },
 } as const;
+
+/** Sangria pedida pelas gráficas e a margem extra onde vão as marcas de corte (mm). */
+const BLEED_MM = 3;
+const SLUG_MM = 5;
 
 type FormatKey = keyof typeof FORMATS;
 
@@ -38,7 +42,56 @@ function formatWhatsapp(number: string): string {
   return match ? `(${match[1]}) ${match[2]}-${match[3]}` : number;
 }
 
-function MenuRow({ item }: { item: PrintedMenuItem }) {
+/** Marcas de corte nos cantos, fora da sangria, para a gráfica. */
+function CropMarks({ width, height }: { width: number; height: number }) {
+  const edge = BLEED_MM + SLUG_MM;
+  const totalW = width + edge * 2;
+  const totalH = height + edge * 2;
+  const xs = [edge, edge + width];
+  const ys = [edge, edge + height];
+  const len = SLUG_MM - 1;
+  const lines: [number, number, number, number][] = [];
+  for (const x of xs) {
+    lines.push([x, 0, x, len], [x, totalH - len, x, totalH]);
+  }
+  for (const y of ys) {
+    lines.push([0, y, len, y], [totalW - len, y, totalW, y]);
+  }
+  return (
+    <svg
+      className='pm-crop'
+      viewBox={`0 0 ${totalW} ${totalH}`}
+      aria-hidden
+    >
+      {lines.map(([x1, y1, x2, y2]) => (
+        <line
+          key={`${x1}-${y1}-${x2}-${y2}`}
+          x1={x1}
+          y1={y1}
+          x2={x2}
+          y2={y2}
+          stroke='#000'
+          strokeWidth={0.25}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function MenuRow({
+  item,
+  showPrice,
+}: {
+  item: PrintedMenuItem;
+  showPrice: boolean;
+}) {
+  if (!showPrice) {
+    return (
+      <li className='pm-row pm-row-plain'>
+        <span className='pm-name'>{item.name}</span>
+      </li>
+    );
+  }
   return (
     <li className='pm-row'>
       <span className='pm-name'>{item.name}</span>
@@ -54,13 +107,25 @@ function MenuRow({ item }: { item: PrintedMenuItem }) {
 export default async function PrintedMenuPage({
   searchParams,
 }: {
-  searchParams: Promise<{ formato?: string; apto?: string }>;
+  searchParams: Promise<{
+    formato?: string;
+    apto?: string;
+    precos?: string;
+    sangria?: string;
+  }>;
 }) {
   await requireAdminPage();
   const params = await searchParams;
 
   const formatKey: FormatKey = params.formato === 'a4' ? 'a4' : 'a5';
   const format = FORMATS[formatKey];
+  // Placa (PS, acrílico) não leva preço: preço muda, a placa fica. Os preços
+  // vão na folha A5 do display, que se troca.
+  const showPrices = params.precos !== 'nao';
+  const bleed = params.sangria === 'sim';
+  const edge = bleed ? BLEED_MM + SLUG_MM : 0;
+  const pageW = format.width + edge * 2;
+  const pageH = format.height + edge * 2;
   // "apto", e não "quarto": o RoomParamCapture do layout raiz apaga o
   // ?quarto= da URL em qualquer página, e recarregar perderia o quarto.
   // O formato aceito é o mesmo dele.
@@ -115,7 +180,7 @@ export default async function PrintedMenuPage({
 
   return (
     <section className='space-y-6'>
-      <style>{`@page { size: ${format.page}; margin: 0; }`}</style>
+      <style>{`@page { size: ${pageW}mm ${pageH}mm; margin: 0; }`}</style>
 
       <div className='space-y-2 print:hidden'>
         <h2 className='text-xl font-semibold'>Cardápio impresso</h2>
@@ -133,20 +198,27 @@ export default async function PrintedMenuPage({
         </p>
       )}
 
-      <PrintedMenuToolbar format={formatKey} room={room} />
+      <PrintedMenuToolbar
+        format={formatKey}
+        room={room}
+        showPrices={showPrices}
+        bleed={bleed}
+      />
 
       <div
         className={`pm-root ${playfair.variable} ${inter.variable}`}
         data-format={formatKey}
         style={
           {
-            '--pm-w': format.width,
-            '--pm-h': format.height,
+            '--pm-w': `${pageW}mm`,
+            '--pm-h': `${pageH}mm`,
+            '--pm-edge': `${edge}mm`,
           } as React.CSSProperties
         }
       >
         {/* Frente: marca, o que está no quarto e como pedir */}
         <article className='pm-sheet pm-front' aria-label='Frente do cardápio'>
+          {bleed && <CropMarks width={format.width} height={format.height} />}
           <div className='pm-sheet-body'>
             <header className='pm-brand'>
               <img
@@ -167,7 +239,7 @@ export default async function PrintedMenuPage({
                 data-dense={roomItems.length > 10 || undefined}
               >
                 {roomItems.map(item => (
-                  <MenuRow key={item.id} item={item} />
+                  <MenuRow key={item.id} item={item} showPrice={showPrices} />
                 ))}
               </ul>
             </div>
@@ -182,8 +254,9 @@ export default async function PrintedMenuPage({
               <div className='pm-order-text'>
                 <p className='pm-order-title'>Quer mais?</p>
                 <p>
-                  Aponte a câmera para o código, escolha com calma e receba aqui
-                  no quarto, em embalagem discreta.
+                  Aponte a câmera para o código
+                  {showPrices ? '' : ', veja preços e fotos'}, escolha com calma
+                  e receba aqui no quarto, em embalagem discreta.
                 </p>
                 <p>
                   <strong>Pague na entrega:</strong> Pix, cartão ou dinheiro.
@@ -203,6 +276,7 @@ export default async function PrintedMenuPage({
 
         {/* Verso: todos os brinquedos em estoque */}
         <article className='pm-sheet pm-back' aria-label='Verso do cardápio'>
+          {bleed && <CropMarks width={format.width} height={format.height} />}
           <div className='pm-sheet-body'>
             <h3 className='pm-title'>Brinquedos</h3>
             <p className='pm-subtitle'>
@@ -211,18 +285,24 @@ export default async function PrintedMenuPage({
             {toys.length > 0 ? (
               <ul className='pm-list pm-list-lg pm-toys'>
                 {toys.map(item => (
-                  <MenuRow key={item.id} item={item} />
+                  <MenuRow key={item.id} item={item} showPrice={showPrices} />
                 ))}
               </ul>
             ) : (
               <p className='pm-empty'>Nenhum brinquedo em estoque.</p>
             )}
-            <p className='pm-more'>Fotos e detalhes de cada um em {siteHost}</p>
+            <p className='pm-more'>
+              {showPrices ? 'Fotos e detalhes' : 'Preços, fotos e detalhes'} de
+              cada um em {siteHost}
+            </p>
             <footer className='pm-footer'>
               <span>Peça pelo QR code da frente</span>
               <span>
-                Preços de {updatedAt}
-                {room ? ` · Quarto ${room}` : ''}
+                {showPrices
+                  ? `Preços de ${updatedAt}${room ? ` · Quarto ${room}` : ''}`
+                  : room
+                    ? `Quarto ${room}`
+                    : ''}
               </span>
             </footer>
           </div>

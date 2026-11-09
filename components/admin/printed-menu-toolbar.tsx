@@ -10,10 +10,17 @@ import { cn } from '@/lib/utils';
 type Props = {
   format: 'a5' | 'a4';
   room: string;
+  showPrices: boolean;
+  bleed: boolean;
 };
 
 /** Barra de controles do /admin/cardapio — some na impressão. */
-export function PrintedMenuToolbar({ format, room }: Props) {
+export function PrintedMenuToolbar({
+  format,
+  room,
+  showPrices,
+  bleed,
+}: Props) {
   const [overflowing, setOverflowing] = useState<string[]>([]);
 
   // Avisa quando o conteúdo passa do tamanho da folha (a folha corta o que
@@ -42,11 +49,13 @@ export function PrintedMenuToolbar({ format, room }: Props) {
       cancelled = true;
       window.removeEventListener('resize', measure);
     };
-  }, [format]);
+  }, [format, showPrices, bleed]);
 
   const hrefFor = (nextFormat: 'a5' | 'a4') => {
     const params = new URLSearchParams({ formato: nextFormat });
     if (room) params.set('apto', room);
+    if (!showPrices) params.set('precos', 'nao');
+    if (bleed) params.set('sangria', 'sim');
     return `/admin/cardapio?${params.toString()}`;
   };
 
@@ -89,6 +98,26 @@ export function PrintedMenuToolbar({ format, room }: Props) {
               className='w-28'
             />
           </label>
+          <label className='flex h-9 items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='precos'
+              value='nao'
+              defaultChecked={!showPrices}
+              className='size-4'
+            />
+            Sem preços (placa)
+          </label>
+          <label className='flex h-9 items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='sangria'
+              value='sim'
+              defaultChecked={bleed}
+              className='size-4'
+            />
+            Sangria 3 mm e marcas de corte
+          </label>
           <Button type='submit' variant='outline'>
             Aplicar
           </Button>
@@ -107,7 +136,9 @@ export function PrintedMenuToolbar({ format, room }: Props) {
       <p className='text-xs text-muted-foreground'>
         Preencha o quarto para a frente trazer os itens daquele quarto (a lista
         fica em lib/room-kits.ts) e o QR já abrir o site com a entrega nele. Sem
-        quarto, a frente mostra só o que todos os quartos têm. Na impressão:
+        quarto, a frente mostra só o que todos os quartos têm. Para a placa da
+        gráfica, marque “Sem preços” e “Sangria” e salve como PDF; os preços
+        ficam na folha A5 do display. Na impressão:
         frente e verso virando pela borda maior, margens “Nenhuma” e escala
         100%.
       </p>
