@@ -33,6 +33,7 @@ export default function CheckoutPaymentPage() {
         lastName: string;
         cpf: string;
         email: string;
+        phone?: string;
       } | undefined;
 
       try {

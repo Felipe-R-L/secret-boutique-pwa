@@ -168,6 +168,22 @@ export async function decrementOrderStockByVariants(
   supabase: ServiceRoleClient,
   orderId: string,
 ) {
+  return adjustOrderStockByVariants(supabase, orderId, -1);
+}
+
+/** Devolve ao estoque os itens de um pedido (ex.: estorno com devolução). */
+export async function restoreOrderStockByVariants(
+  supabase: ServiceRoleClient,
+  orderId: string,
+) {
+  return adjustOrderStockByVariants(supabase, orderId, 1);
+}
+
+async function adjustOrderStockByVariants(
+  supabase: ServiceRoleClient,
+  orderId: string,
+  direction: -1 | 1,
+) {
   const { data: orderItems, error: orderItemsError } = await supabase
     .from("order_items")
     .select("product_id,variant_id,quantity")
@@ -212,14 +228,20 @@ export async function decrementOrderStockByVariants(
           .reduce((total, item) => total + item.quantity, 0);
 
         const nextStock = Math.max(
-          variant.stock_quantity - reservedQuantity,
+          variant.stock_quantity + direction * reservedQuantity,
           0,
         );
 
         return {
           ...variant,
           stock_quantity: nextStock,
-          in_stock: variant.in_stock && nextStock > 0,
+          // Na devolução, a variante que estava zerada (desligada pela venda)
+          // volta a aparecer; uma desligada à mão com estoque continua off.
+          in_stock:
+            direction < 0
+              ? variant.in_stock && nextStock > 0
+              : nextStock > 0 &&
+                (variant.in_stock || variant.stock_quantity === 0),
         };
       });
 
@@ -251,7 +273,10 @@ export async function decrementOrderStockByVariants(
       (total, item) => total + item.quantity,
       0,
     );
-    const nextStock = Math.max((product.stock_quantity ?? 0) - soldQuantity, 0);
+    const nextStock = Math.max(
+      (product.stock_quantity ?? 0) + direction * soldQuantity,
+      0,
+    );
 
     const { error } = await supabase
       .from("products")

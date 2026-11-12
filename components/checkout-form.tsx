@@ -121,6 +121,15 @@ function formatCpf(value: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10)
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -162,6 +171,7 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [cpf, setCpf] = useState("");
+  const [phone, setPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [emailConfirmation, setEmailConfirmation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -371,6 +381,8 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
         lastName: lastName.trim(),
         cpf: cpfDigits,
         email: customerEmail.trim(),
+        // Opcional: vai só para o antifraude do Mercado Pago, não fica no banco.
+        phone: phone.replace(/\D/g, ""),
       }),
     );
 
@@ -892,6 +904,29 @@ export function CheckoutForm({ onSuccess }: CheckoutFormProps) {
                   className="h-12 rounded-xl"
                   maxLength={14}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="payer-phone"
+                  className="text-sm text-muted-foreground"
+                >
+                  Celular <span className="text-xs">(opcional)</span>
+                </label>
+                <Input
+                  id="payer-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  placeholder="(00) 00000-0000"
+                  value={phone}
+                  onChange={(e) => setPhone(formatPhone(e.target.value))}
+                  className="h-12 rounded-xl"
+                  maxLength={15}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ajuda o Mercado Pago a aprovar o pagamento. Não guardamos.
+                </p>
               </div>
 
               <div className="space-y-2">

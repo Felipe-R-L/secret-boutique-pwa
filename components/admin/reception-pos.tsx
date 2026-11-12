@@ -18,12 +18,17 @@ import {
   CreditCard,
   Banknote,
   HandCoins,
+  Smartphone,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   createReceptionOrder,
   confirmInPersonPayment,
+  startPointPayment,
+  checkPointPayment,
+  cancelPointPayment,
 } from "@/lib/actions/reception";
 import {
   cashChangeDueCents,
@@ -61,15 +66,47 @@ type CartLine = {
 };
 
 type DeliveryMethod = "MOTEL_PICKUP" | "ROOM_DELIVERY";
-type PaymentMethod = "PIX" | "CARD" | "CASH";
-// registered: pedido de cartão/dinheiro para o quarto, a cobrar na entrega.
-type Phase = "building" | "paying" | "paid" | "registered";
+// POINT: cobrança enviada à maquininha integrada (cartão ou QR na Point).
+// CARD: cartão confirmado à mão — só quando não há maquininha integrada.
+type PaymentMethod = "POINT" | "PIX" | "CARD" | "CASH";
+type ManualMethod = "CARD" | "PIX" | "CASH";
+// registered: pedido para o quarto, a cobrar na entrega.
+// point: aguardando o cliente pagar na maquininha.
+type Phase = "building" | "paying" | "point" | "paid" | "registered";
+type PointState =
+  | "waiting"
+  | "paid"
+  | "failed"
+  | "canceled"
+  | "expired"
+  | "action_required"
+  | "unknown";
+
+const PAID_METHOD_LABELS: Record<string, string> = {
+  CARD: "Cartão",
+  PIX: "Pix",
+  CASH: "Dinheiro",
+};
+
+const POINT_STATE_MESSAGES: Partial<Record<PointState, string>> = {
+  failed: "Pagamento recusado na maquininha.",
+  canceled: "A cobrança foi cancelada na maquininha.",
+  expired: "A cobrança expirou sem pagamento.",
+  action_required: "A maquininha está pedindo uma ação — confira a tela dela.",
+};
 
 function lineKey(productId: string, variantId?: string) {
   return `${productId}:${variantId ?? "base"}`;
 }
 
-export function ReceptionPos({ products }: { products: ProductOption[] }) {
+export function ReceptionPos({
+  products,
+  pointEnabled,
+}: {
+  products: ProductOption[];
+  pointEnabled: boolean;
+}) {
+  const defaultMethod: PaymentMethod = pointEnabled ? "POINT" : "CARD";
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [variantPicker, setVariantPicker] = useState<ProductOption | null>(null);
@@ -78,7 +115,8 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     useState<DeliveryMethod>("MOTEL_PICKUP");
   const [roomNumber, setRoomNumber] = useState("");
   const [customerName, setCustomerName] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CARD");
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethod>(defaultMethod);
   const [cashChangeFor, setCashChangeFor] = useState("");
 
   const [phase, setPhase] = useState<Phase>("building");
@@ -88,6 +126,8 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
   const [ticketUrl, setTicketUrl] = useState<string | null>(null);
   const [pickupCode, setPickupCode] = useState<string | null>(null);
   const [status, setStatus] = useState("PENDING");
+  const [pointState, setPointState] = useState<PointState>("waiting");
+  const [paidMethod, setPaidMethod] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -174,7 +214,7 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     setDeliveryMethod("MOTEL_PICKUP");
     setRoomNumber("");
     setCustomerName("");
-    setPaymentMethod("CARD");
+    setPaymentMethod(defaultMethod);
     setCashChangeFor("");
     setPhase("building");
     setOrderId(null);
@@ -183,6 +223,8 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     setTicketUrl(null);
     setPickupCode(null);
     setStatus("PENDING");
+    setPointState("waiting");
+    setPaidMethod(null);
     setError("");
     setCopied(false);
   };
@@ -193,12 +235,55 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
       const result = await checkOrderStatus(id);
       if (!result.ok) return;
       setStatus(result.data.status);
-      if (result.data.status === "PAID") {
+      if (result.data.status === "PAID" || result.data.status === "COMPLETED") {
         if (pollRef.current) clearInterval(pollRef.current);
         setPickupCode(result.data.pickupCode ?? null);
+        setPaidMethod("PIX");
         setPhase("paid");
       }
     }, 3000);
+  };
+
+  const startPointPolling = (id: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      const result = await checkPointPayment({ orderId: id });
+      if (!result.ok) return;
+      setPointState(result.state);
+      if (result.state === "paid") {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setPickupCode(result.pickupCode ?? null);
+        setPaidMethod(result.paymentMethod);
+        setPhase("paid");
+      } else if (
+        result.state !== "waiting" &&
+        result.state !== "action_required"
+      ) {
+        // Recusado/cancelado/expirado: para de consultar até tentar de novo.
+        if (pollRef.current) clearInterval(pollRef.current);
+      }
+    }, 3000);
+  };
+
+  // Envia (ou reenvia) a cobrança do pedido para a maquininha.
+  const sendToPoint = async (id: string) => {
+    setError("");
+    setIsSubmitting(true);
+    const result = await startPointPayment({ orderId: id });
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      setPointState("unknown");
+      return;
+    }
+    setPointState(result.state);
+    if (result.state === "paid") {
+      setPickupCode(result.pickupCode ?? null);
+      setPaidMethod(result.paymentMethod);
+      setPhase("paid");
+      return;
+    }
+    startPointPolling(id);
   };
 
   const cashChangeCents = parseBrlToCents(cashChangeFor);
@@ -237,7 +322,8 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     roomNumber:
       deliveryMethod === "ROOM_DELIVERY" ? roomNumber.trim() : undefined,
     customerName: customerName.trim() || undefined,
-    paymentMethod,
+    // A maquininha grava a forma real (cartão ou Pix) quando o pagamento entra.
+    paymentMethod: paymentMethod === "POINT" ? "CARD" : paymentMethod,
     cashChangeForCents:
       paymentMethod === "CASH" && cashChangeCents ? cashChangeCents : undefined,
     settleNow,
@@ -245,9 +331,26 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
 
   // Cartão/dinheiro: no balcão o valor já foi recebido e a venda fecha agora;
   // para o quarto, o pedido fica "a cobrar na entrega" no painel de pedidos.
+  // Maquininha no balcão: cria o pedido e manda a cobrança para a Point.
   const handleInPersonSale = async () => {
     setError("");
     if (!validateSale()) return;
+
+    if (paymentMethod === "POINT" && deliveryMethod === "MOTEL_PICKUP") {
+      setIsSubmitting(true);
+      const created = await createReceptionOrder(buildOrderInput(false));
+      setIsSubmitting(false);
+      if (!created.ok) {
+        setError(created.error);
+        return;
+      }
+      setOrderId(created.orderId);
+      setPickupCode(created.pickupCode);
+      setPointState("waiting");
+      setPhase("point");
+      await sendToPoint(created.orderId);
+      return;
+    }
 
     const settleNow = deliveryMethod === "MOTEL_PICKUP";
     setIsSubmitting(true);
@@ -261,6 +364,7 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
 
     setOrderId(created.orderId);
     setPickupCode(created.pickupCode);
+    if (settleNow) setPaidMethod(paymentMethod);
     setPhase(settleNow ? "paid" : "registered");
   };
 
@@ -298,8 +402,9 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     startPolling(created.orderId);
   };
 
-  // Cobrança Pix que o cliente acabou pagando na maquininha ou em dinheiro.
-  const handleMarkPaid = async (method: "CARD" | "CASH") => {
+  // Pagamento recebido por fora (maquininha avulsa, Pix direto, dinheiro).
+  // O servidor tira da Point qualquer cobrança ainda aberta antes de fechar.
+  const handleMarkPaid = async (method: ManualMethod) => {
     if (!orderId) return;
     setIsConfirming(true);
     setError("");
@@ -316,7 +421,37 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
     }
     if (pollRef.current) clearInterval(pollRef.current);
     setPickupCode(result.pickupCode ?? null);
+    setPaidMethod(method);
     setPhase("paid");
+  };
+
+  // Pix na tela que o cliente prefere pagar na maquininha: o QR é cancelado.
+  const handleSwitchToPoint = async () => {
+    if (!orderId) return;
+    if (pollRef.current) clearInterval(pollRef.current);
+    setPointState("waiting");
+    setPhase("point");
+    await sendToPoint(orderId);
+  };
+
+  // Cancelar a venda tira a cobrança da maquininha e cancela o pedido.
+  const handleCancelPointSale = async () => {
+    if (!orderId) {
+      resetSale();
+      return;
+    }
+    if (pollRef.current) clearInterval(pollRef.current);
+    setIsConfirming(true);
+    setError("");
+    const result = await cancelPointPayment({ orderId, cancelOrder: true });
+    setIsConfirming(false);
+    if (!result.ok) {
+      setError(result.error);
+      // Pode ter sido pago no meio do cancelamento: confere de novo.
+      startPointPolling(orderId);
+      return;
+    }
+    resetSale();
   };
 
   const handleCopy = async () => {
@@ -336,6 +471,11 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
           <CheckCircle2 className="size-9 text-green-600" />
         </div>
         <h3 className="text-xl font-semibold text-green-800">Pagamento confirmado</h3>
+        {paidMethod && PAID_METHOD_LABELS[paidMethod] && (
+          <p className="text-sm font-medium text-green-800">
+            {formatCents(totalCents)} — {PAID_METHOD_LABELS[paidMethod]}
+          </p>
+        )}
         <p className="text-sm text-green-700">
           {deliveryMethod === "ROOM_DELIVERY"
             ? `Prepare o pedido e leve ao quarto ${roomNumber.trim()}.`
@@ -372,7 +512,9 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
             {formatCents(totalCents)}
           </p>
           <p className="text-xs text-muted-foreground">
-            {describeInPersonPayment(paymentMethod, cashChangeCents)}
+            {paymentMethod === "POINT"
+              ? "Na maquininha — cartão ou Pix"
+              : describeInPersonPayment(paymentMethod, cashChangeCents)}
           </p>
           {changeDueCents && (
             <p className="mt-1 text-sm font-medium text-purple-800">
@@ -381,11 +523,130 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
           )}
         </div>
         <p className="text-sm text-purple-800">
-          Ao entregar, confirme o recebimento em Pedidos → A cobrar.
+          {paymentMethod === "POINT"
+            ? "Na porta do quarto, toque em Cobrar na maquininha em Pedidos → A cobrar."
+            : "Ao entregar, confirme o recebimento em Pedidos → A cobrar."}
         </p>
         <Button className="w-full rounded-xl" onClick={resetSale}>
           Nova venda
         </Button>
+      </div>
+    );
+  }
+
+  // ---- POINT (aguardando na maquininha) ----
+  if (phase === "point") {
+    const stateMessage = POINT_STATE_MESSAGES[pointState];
+    const canRetry =
+      !isSubmitting &&
+      (pointState === "failed" ||
+        pointState === "canceled" ||
+        pointState === "expired" ||
+        pointState === "unknown");
+
+    return (
+      <div className="mx-auto max-w-md space-y-4">
+        <div className="rounded-2xl border border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">Cobrar na maquininha</p>
+          <p className="mt-1 text-3xl font-bold text-foreground">
+            {formatCents(totalCents)}
+          </p>
+
+          {isSubmitting ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="size-6 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">
+                Enviando para a maquininha...
+              </p>
+            </div>
+          ) : stateMessage ? (
+            <div className="mt-4 flex flex-col items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+              <AlertTriangle className="size-6" />
+              <p className="text-sm font-medium">{stateMessage}</p>
+            </div>
+          ) : pointState === "waiting" ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Smartphone className="size-10 text-primary" />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-pastel-sage opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-pastel-sage" />
+                </span>
+                Aguardando o cliente pagar na maquininha
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Cartão ou Pix pelo QR na tela da Point. Se a cobrança não
+                aparecer, toque em Atualizar na maquininha.
+              </p>
+            </div>
+          ) : null}
+
+          {canRetry && orderId && (
+            <Button
+              type="button"
+              className="mt-4 w-full rounded-xl"
+              onClick={() => sendToPoint(orderId)}
+            >
+              Enviar de novo para a maquininha
+            </Button>
+          )}
+        </div>
+
+        {error && (
+          <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+
+        <div className="grid grid-cols-1 gap-2">
+          <p className="pt-1 text-center text-xs text-muted-foreground">
+            Maquininha fora do ar ou cliente pagou de outro jeito?
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-auto rounded-xl py-2 text-xs"
+              onClick={() => handleMarkPaid("CARD")}
+              disabled={isConfirming}
+            >
+              <CreditCard className="mr-1 size-4" />
+              {isConfirming ? "..." : "Cartão"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-auto rounded-xl py-2 text-xs"
+              onClick={() => handleMarkPaid("PIX")}
+              disabled={isConfirming}
+            >
+              <QrCode className="mr-1 size-4" />
+              {isConfirming ? "..." : "Pix"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-auto rounded-xl py-2 text-xs"
+              onClick={() => handleMarkPaid("CASH")}
+              disabled={isConfirming}
+            >
+              <Banknote className="mr-1 size-4" />
+              {isConfirming ? "..." : "Dinheiro"}
+            </Button>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            className="rounded-xl text-muted-foreground"
+            onClick={handleCancelPointSale}
+            disabled={isConfirming}
+          >
+            Cancelar venda
+          </Button>
+        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          O status atualiza sozinho a cada 3 segundos.
+        </p>
       </div>
     );
   }
@@ -468,6 +729,18 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
         )}
 
         <div className="grid grid-cols-1 gap-2">
+          {pointEnabled && (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={handleSwitchToPoint}
+              disabled={isConfirming || isSubmitting}
+            >
+              <Smartphone className="mr-1 size-4" />
+              Cobrar na maquininha
+            </Button>
+          )}
           <p className="pt-1 text-center text-xs text-muted-foreground">
             Cliente pagou de outro jeito?
           </p>
@@ -679,12 +952,17 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
         <div className="space-y-2 border-t border-border pt-3">
           <p className="text-xs font-medium text-muted-foreground">Pagamento</p>
           <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                { method: "CARD", label: "Cartão", icon: CreditCard },
-                { method: "CASH", label: "Dinheiro", icon: Banknote },
-                { method: "PIX", label: "Pix", icon: QrCode },
-              ] as const
+            {(pointEnabled
+              ? ([
+                  { method: "POINT", label: "Maquininha", icon: Smartphone },
+                  { method: "PIX", label: "Pix na tela", icon: QrCode },
+                  { method: "CASH", label: "Dinheiro", icon: Banknote },
+                ] as const)
+              : ([
+                  { method: "CARD", label: "Cartão", icon: CreditCard },
+                  { method: "CASH", label: "Dinheiro", icon: Banknote },
+                  { method: "PIX", label: "Pix", icon: QrCode },
+                ] as const)
             ).map((option) => {
               const Icon = option.icon;
               return (
@@ -750,9 +1028,11 @@ export function ReceptionPos({ products }: { products: ProductOption[] }) {
           >
             {isSubmitting
               ? "Registrando..."
-              : deliveryMethod === "MOTEL_PICKUP"
-                ? `Recebi ${formatCents(totalCents)} — finalizar venda`
-                : "Registrar pedido — cobrar na entrega"}
+              : deliveryMethod === "ROOM_DELIVERY"
+                ? "Registrar pedido — cobrar na entrega"
+                : paymentMethod === "POINT"
+                  ? `Cobrar ${formatCents(totalCents)} na maquininha`
+                  : `Recebi ${formatCents(totalCents)} — finalizar venda`}
           </Button>
         )}
       </section>

@@ -2,6 +2,7 @@ import { requireAdminPage } from "@/lib/auth/admin";
 import { ADMIN_ORDER_COLUMNS, ADMIN_ORDER_LIMIT } from "@/lib/admin-orders";
 import { createClient } from "@/lib/supabase/server";
 import { OrdersDashboard } from "@/components/admin/orders-dashboard";
+import { getPointTerminalId } from "@/lib/mercadopago/client";
 import { PushNotifications } from "@/components/admin/push-notifications";
 
 export default async function AdminOrdersPage() {
@@ -39,6 +40,7 @@ export default async function AdminOrdersPage() {
       <OrdersDashboard
         initialOrders={(orders ?? []) as never}
         isAdmin={context.role === "ADMIN"}
+        pointEnabled={getPointTerminalId() !== null}
       />
     </section>
   );

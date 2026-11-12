@@ -2,11 +2,13 @@ import { requireAdminPage } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { parsePersistedProductVariants } from "@/lib/server/product-variants";
 import { ReceptionPos } from "@/components/admin/reception-pos";
+import { getPointTerminalId } from "@/lib/mercadopago/client";
 
 export default async function AdminReceptionPage() {
   await requireAdminPage();
 
   const supabase = createServiceRoleClient();
+  const pointEnabled = getPointTerminalId() !== null;
 
   const { data: products } = await supabase
     .from("products")
@@ -41,13 +43,14 @@ export default async function AdminReceptionPage() {
         <h2 className="text-xl font-semibold">Venda pela Recepção</h2>
         <p className="text-sm text-muted-foreground">
           Para vendas no balcão e hóspedes que pedem pelo telefone do quarto.
-          Cartão ou dinheiro no balcão fecham a venda na hora; para o quarto, o
-          pedido fica &quot;a cobrar na entrega&quot; em Pedidos. Pix gera o QR na tela e
-          confirma sozinho.
+          {pointEnabled
+            ? " Maquininha manda a cobrança para a Point (cartão ou Pix pelo QR dela) e confirma sozinha; Pix na tela mostra o QR aqui."
+            : " Cartão ou dinheiro no balcão fecham a venda na hora; Pix gera o QR na tela e confirma sozinho."}{" "}
+          Para o quarto, o pedido fica &quot;a cobrar na entrega&quot; em Pedidos.
         </p>
       </div>
 
-      <ReceptionPos products={productOptions} />
+      <ReceptionPos products={productOptions} pointEnabled={pointEnabled} />
     </section>
   );
 }

@@ -19,6 +19,10 @@ import {
 } from "@/lib/server/product-variants";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { notifyStaffOfNewOrder } from "@/lib/notifications/new-order";
+import {
+  isPointOrder,
+  settlePaidPointOrder,
+} from "@/lib/server/point-payment";
 import { randomBytes } from "node:crypto";
 
 // Email "de fachada" para montar o pedido Pix no Mercado Pago quando o pedido
@@ -316,6 +320,33 @@ export async function checkOrderStatus(orderId: unknown) {
   if (data.status === "PENDING" && data.mercadopago_order_id) {
     try {
       const mpOrder = await getOrderById(data.mercadopago_order_id);
+
+      // Cobrança na maquininha: fecha pelo fluxo da Point (conclui e grava
+      // cartão/Pix), nunca pelo do Pix online.
+      if (isPointOrder(mpOrder)) {
+        const settled = await settlePaidPointOrder(supabase, mpOrder);
+        if (settled.settled) {
+          return {
+            ok: true as const,
+            data: {
+              id: data.id,
+              status: "COMPLETED",
+              totalCents: data.total_cents,
+              pickupCode: settled.pickupCode,
+            },
+          };
+        }
+        return {
+          ok: true as const,
+          data: {
+            id: data.id,
+            status: data.status,
+            totalCents: data.total_cents,
+            pickupCode: data.pickup_code,
+          },
+        };
+      }
+
       const mpPayment = mpOrder.transactions?.payments?.[0];
       const mpStatus = mpPayment?.status ?? mpOrder.status;
 
@@ -420,13 +451,55 @@ export async function checkOrderStatus(orderId: unknown) {
   };
 }
 
+type MpItemRow = {
+  product_id: string;
+  quantity: number;
+  unit_price_cents: number;
+};
+
+/** Itens do pedido no formato da Orders API (inclui o frete como item). */
+function buildMpItems(rows: MpItemRow[], deliveryFeeCents: number) {
+  // Título/descrição genéricos por discrição: o nome real do produto não vai
+  // para o Mercado Pago. O external_code (id do produto) basta para conciliar.
+  const items = rows.map((row) => {
+    return {
+      external_code: row.product_id,
+      title: "Produto Secret Boutique",
+      description: "Item do pedido",
+      category_id: "others",
+      quantity: row.quantity,
+      unit_price: centsToDecimalString(row.unit_price_cents),
+    };
+  });
+  if (deliveryFeeCents > 0) {
+    items.push({
+      external_code: "delivery",
+      title: "Entrega",
+      description: "Taxa de entrega",
+      category_id: "services",
+      quantity: 1,
+      unit_price: centsToDecimalString(deliveryFeeCents),
+    });
+  }
+  return items;
+}
+
 // Payer info is passed through to Mercado Pago only — NOT stored in our DB
 type PayerInfo = {
   firstName: string;
   lastName: string;
   cpf: string;
   email: string;
+  phone?: string;
 };
+
+/** Celular BR (DDD + 8 ou 9 dígitos) no formato do payer do MP, ou null. */
+function toMpPhone(raw: unknown) {
+  if (typeof raw !== "string") return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 11) return null;
+  return { area_code: digits.slice(0, 2), number: digits.slice(2) };
+}
 
 export async function generatePixOrder(
   orderId: unknown,
@@ -441,7 +514,7 @@ export async function generatePixOrder(
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select(
-      "id,customer_name,customer_email,payment_method,total_cents,status,mercadopago_order_id",
+      "id,customer_name,customer_email,payment_method,total_cents,status,mercadopago_order_id,delivery_method,delivery_fee_cents,delivery_cep,delivery_street,delivery_number,delivery_complement,delivery_neighborhood,delivery_city,delivery_state",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -469,6 +542,12 @@ export async function generatePixOrder(
       order.customer_name.split(" ").slice(1).join(" ") ||
       order.customer_name;
 
+    const { data: orderItems } = await supabase
+      .from("order_items")
+      .select("product_id,quantity,unit_price_cents")
+      .eq("order_id", order.id);
+
+    const isHomeDelivery = order.delivery_method === "HOME_DELIVERY";
     const payload: Record<string, unknown> = {
       type: "online",
       processing_mode: "automatic",
@@ -487,7 +566,25 @@ export async function generatePixOrder(
               },
             }
           : {}),
+        ...(toMpPhone(payerInfo?.phone)
+          ? { phone: toMpPhone(payerInfo?.phone) }
+          : {}),
+        ...(isHomeDelivery && order.delivery_cep
+          ? {
+              address: {
+                zip_code: order.delivery_cep,
+                street_name: order.delivery_street ?? undefined,
+                street_number: order.delivery_number ?? undefined,
+                neighborhood: order.delivery_neighborhood ?? undefined,
+                city: order.delivery_city ?? undefined,
+                state: order.delivery_state ?? undefined,
+                complement: order.delivery_complement ?? undefined,
+              },
+            }
+          : {}),
       },
+      // Itens melhoram a aprovação no antifraude do MP (checklist de qualidade).
+      items: buildMpItems(orderItems ?? [], order.delivery_fee_cents ?? 0),
       transactions: {
         payments: [
           {

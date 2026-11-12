@@ -9,6 +9,9 @@ import {
   orderStatusSchema,
 } from "@/lib/schemas";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { releaseOpenPointOrder } from "@/lib/server/point-payment";
+import { restoreOrderStockByVariants } from "@/lib/server/product-variants";
+import { getOrderById, refundMpOrder } from "@/lib/mercadopago/client";
 import {
   sendReadyForPickupEmail,
   sendOrderCompletedEmail,
@@ -148,7 +151,7 @@ export async function updateOrderStatus(input: unknown) {
   // Fetch current order to validate transition
   const { data: currentOrder } = await supabase
     .from("orders")
-    .select("id,status,delivery_method,payment_method")
+    .select("id,status,delivery_method,payment_method,mercadopago_order_id")
     .eq("id", parsed.data.id)
     .maybeSingle();
 
@@ -196,6 +199,19 @@ export async function updateOrderStatus(input: unknown) {
         ok: false as const,
         error: `Transição de ${currentOrder.status} para ${newStatus} não permitida.`,
       };
+    }
+  }
+
+  // Cancelar um pedido com cobrança aberta na maquininha: tira da Point antes,
+  // para o cliente não pagar no terminal um pedido cancelado.
+  if (newStatus === "CANCELLED" && currentOrder.status === "PENDING") {
+    const released = await releaseOpenPointOrder(
+      supabase,
+      currentOrder.mercadopago_order_id,
+      context,
+    );
+    if (!released.ok) {
+      return { ok: false as const, error: released.error };
     }
   }
 
@@ -259,6 +275,161 @@ export async function updateOrderStatus(input: unknown) {
 
   revalidatePath("/admin/orders");
   return { ok: true as const };
+}
+
+const refundOrderSchema = z
+  .object({
+    id: z.string().uuid(),
+    restock: z.boolean(),
+  })
+  .strict();
+
+const REFUNDABLE_STATUSES = [
+  "PAID",
+  "PREPARING",
+  "READY_FOR_PICKUP",
+  "COMPLETED",
+] as const;
+
+/**
+ * Estorno total pelo Mercado Pago (Pix online ou maquininha Point). Só o ADMIN.
+ * O pedido vai para CANCELLED; `restock` devolve os itens ao estoque quando o
+ * produto voltou (ou nem chegou a sair).
+ *
+ * Pagamento em dinheiro ou confirmado à mão não passou pela API: não há o que
+ * estornar aqui, a devolução é feita no balcão.
+ */
+export async function refundOrder(input: unknown) {
+  const context = await requireAdminContext({ write: true });
+  if (context.role !== "ADMIN") {
+    return {
+      ok: false as const,
+      error: "Apenas o administrador pode estornar pedidos.",
+    };
+  }
+
+  const parsed = refundOrderSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: "Dados inválidos" };
+  }
+
+  const supabase = createServiceRoleClient();
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id,status,payment_method,total_cents,mercadopago_order_id")
+    .eq("id", parsed.data.id)
+    .maybeSingle();
+
+  if (!order) return { ok: false as const, error: "Pedido não encontrado" };
+  if (
+    !REFUNDABLE_STATUSES.includes(
+      order.status as (typeof REFUNDABLE_STATUSES)[number],
+    )
+  ) {
+    return {
+      ok: false as const,
+      error: "Só dá para estornar pedido pago.",
+    };
+  }
+  if (!order.mercadopago_order_id) {
+    return {
+      ok: false as const,
+      error:
+        "Esse pedido não foi pago pelo Mercado Pago (dinheiro ou confirmação manual). Devolva no balcão.",
+    };
+  }
+
+  let mpOrder;
+  try {
+    mpOrder = await getOrderById(order.mercadopago_order_id);
+  } catch (error) {
+    console.error("Falha ao consultar order para estorno:", error);
+    return {
+      ok: false as const,
+      error: "Não consegui consultar o pagamento no Mercado Pago. Tente de novo.",
+    };
+  }
+
+  const mpStatus = String(mpOrder.status ?? "").toLowerCase();
+  // Já estornado (ex.: pelo painel do MP, ou clique repetido): só sincroniza.
+  const alreadyRefunded = mpStatus === "refunded";
+  if (!alreadyRefunded && mpStatus !== "processed") {
+    return {
+      ok: false as const,
+      error:
+        "O Mercado Pago não registra esse pagamento como aprovado (pode ter sido confirmado à mão). Devolva no balcão.",
+    };
+  }
+
+  let refundStatus = mpStatus;
+  if (!alreadyRefunded) {
+    try {
+      const refunded = await refundMpOrder(order.mercadopago_order_id);
+      refundStatus = String(refunded.status ?? "").toLowerCase();
+    } catch (error) {
+      console.error("Falha ao estornar no Mercado Pago:", error);
+      return {
+        ok: false as const,
+        error:
+          "O Mercado Pago recusou o estorno (ex.: passou de 90 dias ou saldo insuficiente). Veja no painel do MP.",
+      };
+    }
+  }
+
+  const now = new Date().toISOString();
+  const { data: updatedRows } = await supabase
+    .from("orders")
+    .update({ status: "CANCELLED", updated_at: now })
+    .eq("id", order.id)
+    .eq("status", order.status)
+    .select("id");
+
+  // O dinheiro já voltou; se o status mudou no meio, só não mexe no estoque.
+  const statusUpdated = (updatedRows?.length ?? 0) > 0;
+  let restocked = false;
+  if (statusUpdated && parsed.data.restock) {
+    try {
+      await restoreOrderStockByVariants(supabase, order.id);
+      restocked = true;
+    } catch (stockError) {
+      console.error("Falha ao devolver estoque no estorno:", stockError);
+    }
+  }
+
+  await logAudit(
+    {
+      action: "order.refund",
+      category: "order",
+      targetType: "order",
+      targetId: order.id,
+      targetLabel: order.id.slice(0, 8),
+      metadata: {
+        from: order.status,
+        to: statusUpdated ? "CANCELLED" : order.status,
+        paymentMethod: order.payment_method,
+        amountCents: order.total_cents,
+        mpOrderId: order.mercadopago_order_id,
+        mpType: mpOrder.type ?? null,
+        mpStatusAfter: refundStatus,
+        alreadyRefunded,
+        restockRequested: parsed.data.restock,
+        restocked,
+      },
+    },
+    context,
+  );
+
+  revalidatePath("/admin/orders");
+  if (restocked) revalidatePath("/admin/inventory");
+
+  if (!statusUpdated) {
+    return {
+      ok: false as const,
+      error:
+        "Estorno feito no Mercado Pago, mas o pedido mudou na tela. Atualize e cancele se precisar.",
+    };
+  }
+  return { ok: true as const, restocked };
 }
 
 // Complete order by verifying the pickup code

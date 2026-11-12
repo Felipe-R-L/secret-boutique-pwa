@@ -6,6 +6,11 @@ import { decrementOrderStockByVariants } from '@/lib/server/product-variants';
 import { sendVoucherEmail } from '@/lib/services/email';
 import { notifyStaffOfNewOrder } from '@/lib/notifications/new-order';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import {
+  isPointOrder,
+  pointStateOf,
+  settlePaidPointOrder,
+} from '@/lib/server/point-payment';
 
 function generatePickupCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -179,6 +184,23 @@ export async function POST(request: Request) {
   }
 
   const mpOrder = await getOrderById(mpOrderId);
+
+  // Cobrança na maquininha: só o pagamento aprovado mexe no pedido. Recusa,
+  // cancelamento ou expiração deixam o pedido pendente para a recepção tentar
+  // de novo ou receber de outro jeito.
+  if (isPointOrder(mpOrder)) {
+    const outcome = await settlePaidPointOrder(
+      createServiceRoleClient(),
+      mpOrder,
+    );
+    return NextResponse.json({
+      ok: true,
+      point: true,
+      state: pointStateOf(mpOrder),
+      ...outcome,
+    });
+  }
+
   const mappedStatus = mapOrderStatus(mpOrder.status);
 
   if (!mappedStatus) {
