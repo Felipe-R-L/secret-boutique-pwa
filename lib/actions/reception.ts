@@ -16,6 +16,20 @@ import {
   parsePersistedProductVariants,
 } from "@/lib/server/product-variants";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import {
+  cancelMpOrder,
+  createPointOrder,
+  getOrderById,
+  getPointTerminalId,
+} from "@/lib/mercadopago/client";
+import { centsToDecimalString } from "@/lib/money";
+import {
+  isPointOrder,
+  pointStateOf,
+  releaseOpenPointOrder,
+  settlePaidPointOrder,
+  type PointState,
+} from "@/lib/server/point-payment";
 
 function generatePickupCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -328,17 +342,20 @@ export async function createReceptionOrder(
   };
 }
 
-type InPersonMethod = (typeof IN_PERSON_PAYMENT_METHODS)[number];
+// Confirmação manual no balcão: além de cartão e dinheiro, o Pix pago direto
+// na maquininha (modo avulso, fora do sistema) ou por transferência.
+const MANUAL_SETTLE_METHODS = [...IN_PERSON_PAYMENT_METHODS, "PIX"] as const;
+type InPersonMethod = (typeof MANUAL_SETTLE_METHODS)[number];
 
 type SettleResult =
   | { ok: true; pickupCode: string; status: "PAID" | "COMPLETED" }
   | { ok: false; error: string };
 
 /**
- * Registra o recebimento presencial (cartão na maquininha ou dinheiro) de um
- * pedido pendente: grava a forma real de pagamento, move para PAID — ou direto
- * para COMPLETED quando a entrega acontece no mesmo momento — e dá baixa no
- * estoque. Guardado por PENDING para não rodar duas vezes.
+ * Registra o recebimento presencial (cartão na maquininha, Pix ou dinheiro) de
+ * um pedido pendente: grava a forma real de pagamento, move para PAID — ou
+ * direto para COMPLETED quando a entrega acontece no mesmo momento — e dá baixa
+ * no estoque. Guardado por PENDING para não rodar duas vezes.
  */
 async function settleInPersonOrder(
   orderId: string,
@@ -350,7 +367,9 @@ async function settleInPersonOrder(
 
   const { data: order, error: lookupError } = await supabase
     .from("orders")
-    .select("id,status,pickup_code,payment_method,delivery_method")
+    .select(
+      "id,status,pickup_code,payment_method,delivery_method,mercadopago_order_id",
+    )
     .eq("id", orderId)
     .maybeSingle();
 
@@ -368,9 +387,16 @@ async function settleInPersonOrder(
   if (order.delivery_method === "HOME_DELIVERY") {
     return {
       ok: false,
-      error: "Entrega a domicílio é paga só por Pix.",
+      error: "Entrega a domicílio é paga só online.",
     };
   }
+
+  const released = await releaseOpenPointOrder(
+    supabase,
+    order.mercadopago_order_id,
+    context,
+  );
+  if (!released.ok) return released;
 
   const pickupCode = order.pickup_code ?? generatePickupCode();
   const now = new Date().toISOString();
@@ -381,8 +407,8 @@ async function settleInPersonOrder(
     .update({
       status: nextStatus,
       payment_method: method,
-      // Troco só faz sentido em dinheiro; se mudou para cartão, limpa.
-      ...(method === "CARD" ? { cash_change_for_cents: null } : {}),
+      // Troco só faz sentido em dinheiro; se mudou de forma, limpa.
+      ...(method !== "CASH" ? { cash_change_for_cents: null } : {}),
       pickup_code: pickupCode,
       ...(complete ? { completed_at: now } : {}),
       updated_at: now,
@@ -434,7 +460,7 @@ async function settleInPersonOrder(
 const confirmInPersonSchema = z
   .object({
     orderId: z.string().uuid(),
-    method: z.enum(IN_PERSON_PAYMENT_METHODS),
+    method: z.enum(MANUAL_SETTLE_METHODS),
     // true: pagou e já recebeu os produtos (entrega no quarto / balcão).
     complete: z.boolean().default(true),
   })
@@ -459,4 +485,288 @@ export async function confirmInPersonPayment(input: unknown) {
     parsed.data.complete,
     context,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Maquininha Point integrada (modo PDV)
+// ---------------------------------------------------------------------------
+
+
+type PointResult =
+  | {
+      ok: true;
+      state: PointState;
+      orderStatus: string;
+      pickupCode: string | null;
+      paymentMethod: string | null;
+    }
+  | { ok: false; error: string };
+
+const pointOrderInputSchema = z.object({ orderId: z.string().uuid() }).strict();
+
+async function readOrderSnapshot(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  orderId: string,
+) {
+  const { data } = await supabase
+    .from("orders")
+    .select(
+      "id,status,total_cents,pickup_code,payment_method,delivery_method,mercadopago_order_id",
+    )
+    .eq("id", orderId)
+    .maybeSingle();
+  return data;
+}
+
+/**
+ * Manda a cobrança de um pedido pendente para a maquininha. O cliente escolhe
+ * na Point: cartão ou QR (Pix). Reaproveita uma cobrança ainda aberta e, se o
+ * pedido tinha um Pix online gerado, cancela esse QR antes para não haver dois
+ * jeitos de pagar a mesma coisa.
+ */
+export async function startPointPayment(input: unknown): Promise<PointResult> {
+  const context = await requireAdminContext();
+  const parsed = pointOrderInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Pedido inválido." };
+
+  if (!getPointTerminalId()) {
+    return { ok: false, error: "Nenhuma maquininha configurada." };
+  }
+
+  const supabase = createServiceRoleClient();
+  const order = await readOrderSnapshot(supabase, parsed.data.orderId);
+  if (!order) return { ok: false, error: "Pedido não encontrado." };
+  if (order.status !== "PENDING") {
+    return {
+      ok: false,
+      error: `Pedido não está pendente (status atual: ${order.status}).`,
+    };
+  }
+  if (order.delivery_method === "HOME_DELIVERY") {
+    return { ok: false, error: "Entrega a domicílio é paga só online." };
+  }
+
+  if (order.mercadopago_order_id) {
+    let previous;
+    try {
+      previous = await getOrderById(order.mercadopago_order_id);
+    } catch {
+      previous = null;
+    }
+
+    if (previous) {
+      const prevStatus = String(previous.status ?? "").toLowerCase();
+
+      if (isPointOrder(previous)) {
+        const state = pointStateOf(previous);
+        if (state === "waiting") {
+          return {
+            ok: true,
+            state,
+            orderStatus: order.status,
+            pickupCode: order.pickup_code,
+            paymentMethod: order.payment_method,
+          };
+        }
+        if (state === "paid") {
+          const settled = await settlePaidPointOrder(supabase, previous, context);
+          return {
+            ok: true,
+            state,
+            orderStatus: "COMPLETED",
+            pickupCode: settled.settled ? settled.pickupCode : order.pickup_code,
+            paymentMethod: settled.settled
+              ? settled.method
+              : order.payment_method,
+          };
+        }
+        // failed / canceled / expired: segue e cria uma nova cobrança.
+      } else if (prevStatus === "processed") {
+        return {
+          ok: false,
+          error: "O Pix online deste pedido já foi pago — aguarde a confirmação.",
+        };
+      } else if (!["canceled", "cancelled", "expired", "failed"].includes(prevStatus)) {
+        try {
+          await cancelMpOrder(order.mercadopago_order_id);
+        } catch (cancelError) {
+          console.error("Falha ao cancelar o Pix online:", cancelError);
+          return {
+            ok: false,
+            error:
+              "Não consegui cancelar o QR Pix gerado antes. Tente de novo em instantes.",
+          };
+        }
+      }
+    }
+  }
+
+  let mpOrder;
+  try {
+    mpOrder = await createPointOrder({
+      // Único por cobrança: o pedido pode ir à maquininha mais de uma vez.
+      externalReference: `${order.id}-p${Date.now().toString(36)}`,
+      amount: centsToDecimalString(order.total_cents),
+      description: `Pedido ${order.id.slice(0, 8)}`,
+    });
+  } catch (error) {
+    console.error("Falha ao enviar cobrança para a maquininha:", error);
+    return {
+      ok: false,
+      error:
+        "A maquininha não recebeu a cobrança. Confira se ela está ligada, com internet e em modo PDV.",
+    };
+  }
+
+  const mpOrderId = String(mpOrder.id);
+  const { data: updatedRows } = await supabase
+    .from("orders")
+    .update({
+      mercadopago_order_id: mpOrderId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", order.id)
+    .eq("status", "PENDING")
+    .select("id");
+
+  if ((updatedRows?.length ?? 0) === 0) {
+    // Fechado por outro caminho enquanto a cobrança era criada: tira da Point.
+    try {
+      await cancelMpOrder(mpOrderId, true);
+    } catch (cancelError) {
+      console.error("Falha ao cancelar cobrança órfã:", cancelError);
+    }
+    return { ok: false, error: "O pedido já foi fechado por outro caminho." };
+  }
+
+  await logAudit(
+    {
+      action: "order.point_charge",
+      category: "order",
+      targetType: "order",
+      targetId: order.id,
+      targetLabel: order.id.slice(0, 8),
+      metadata: { mpOrderId, totalCents: order.total_cents },
+    },
+    context,
+  );
+
+  return {
+    ok: true,
+    state: "waiting",
+    orderStatus: order.status,
+    pickupCode: order.pickup_code,
+    paymentMethod: order.payment_method,
+  };
+}
+
+/**
+ * Consulta a cobrança na maquininha — usado pela tela da recepção a cada
+ * poucos segundos, como reforço do webhook (que não chega em localhost).
+ */
+export async function checkPointPayment(input: unknown): Promise<PointResult> {
+  const context = await requireAdminContext();
+  const parsed = pointOrderInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Pedido inválido." };
+
+  const supabase = createServiceRoleClient();
+  const order = await readOrderSnapshot(supabase, parsed.data.orderId);
+  if (!order) return { ok: false, error: "Pedido não encontrado." };
+
+  const snapshot = (state: PointState) => ({
+    ok: true as const,
+    state,
+    orderStatus: order.status,
+    pickupCode: order.pickup_code,
+    paymentMethod: order.payment_method,
+  });
+
+  if (order.status === "COMPLETED" || order.status === "PAID") {
+    return snapshot("paid");
+  }
+  if (order.status !== "PENDING" || !order.mercadopago_order_id) {
+    return snapshot("unknown");
+  }
+
+  let mpOrder;
+  try {
+    mpOrder = await getOrderById(order.mercadopago_order_id);
+  } catch {
+    return snapshot("waiting");
+  }
+  if (!isPointOrder(mpOrder)) return snapshot("unknown");
+
+  const state = pointStateOf(mpOrder);
+  if (state === "paid") {
+    const settled = await settlePaidPointOrder(supabase, mpOrder, context);
+    const fresh = await readOrderSnapshot(supabase, order.id);
+    return {
+      ok: true,
+      state,
+      orderStatus: fresh?.status ?? "COMPLETED",
+      pickupCode: settled.settled
+        ? settled.pickupCode
+        : (fresh?.pickup_code ?? null),
+      paymentMethod: fresh?.payment_method ?? null,
+    };
+  }
+  return snapshot(state);
+}
+
+/**
+ * Tira a cobrança da maquininha (inclusive se ela já puxou) e, com
+ * `cancelOrder`, cancela o pedido — usado no "Cancelar venda" da recepção.
+ */
+export async function cancelPointPayment(input: unknown) {
+  const context = await requireAdminContext();
+  const parsed = z
+    .object({ orderId: z.string().uuid(), cancelOrder: z.boolean() })
+    .strict()
+    .safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: "Pedido inválido." };
+  }
+
+  const supabase = createServiceRoleClient();
+  const order = await readOrderSnapshot(supabase, parsed.data.orderId);
+  if (!order) return { ok: false as const, error: "Pedido não encontrado." };
+  if (order.status !== "PENDING") {
+    return {
+      ok: false as const,
+      error: `Pedido não está pendente (status atual: ${order.status}).`,
+    };
+  }
+
+  const released = await releaseOpenPointOrder(
+    supabase,
+    order.mercadopago_order_id,
+    context,
+  );
+  if (!released.ok) return { ok: false as const, error: released.error };
+
+  if (parsed.data.cancelOrder) {
+    const { data: updatedRows } = await supabase
+      .from("orders")
+      .update({ status: "CANCELLED", updated_at: new Date().toISOString() })
+      .eq("id", order.id)
+      .eq("status", "PENDING")
+      .select("id");
+
+    if ((updatedRows?.length ?? 0) > 0) {
+      await logAudit(
+        {
+          action: "order.cancel",
+          category: "order",
+          targetType: "order",
+          targetId: order.id,
+          targetLabel: order.id.slice(0, 8),
+          metadata: { from: "PENDING", to: "CANCELLED", via: "point_cancel" },
+        },
+        context,
+      );
+      revalidatePath("/admin/orders");
+    }
+  }
+
+  return { ok: true as const };
 }

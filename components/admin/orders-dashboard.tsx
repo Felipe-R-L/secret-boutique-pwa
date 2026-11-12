@@ -14,7 +14,12 @@ import {
   CreditCard,
   Banknote,
   HandCoins,
+  Loader2,
+  QrCode,
+  Smartphone,
+  Undo2,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,8 +38,13 @@ import {
   updateOrderStatus,
   completeOrderByPickupCode,
   deleteOrderByAdmin,
+  refundOrder,
 } from "@/lib/actions/orders";
-import { confirmInPersonPayment } from "@/lib/actions/reception";
+import {
+  checkPointPayment,
+  confirmInPersonPayment,
+  startPointPayment,
+} from "@/lib/actions/reception";
 import {
   cashChangeDueCents,
   describeInPersonPayment,
@@ -69,9 +79,22 @@ type Order = {
   channel?: string | null;
   total_cents: number;
   pickup_code: string | null;
+  mercadopago_order_id?: string | null;
   created_at: string;
   updated_at: string;
 };
+
+// Pago pelo Mercado Pago (Pix online ou maquininha): dá para estornar pela API.
+// Se foi confirmado à mão, o servidor recusa e orienta a devolver no balcão.
+function isRefundable(order: Order): boolean {
+  return (
+    Boolean(order.mercadopago_order_id) &&
+    ["PAID", "PREPARING", "READY_FOR_PICKUP", "COMPLETED"].includes(
+      order.status,
+    ) &&
+    order.payment_method !== "CASH"
+  );
+}
 
 // Pedido "pagar na entrega" (cartão/dinheiro) que ainda não foi cobrado.
 function isAwaitingInPersonPayment(order: Order): boolean {
@@ -80,6 +103,29 @@ function isAwaitingInPersonPayment(order: Order): boolean {
     (order.payment_method === "CARD" || order.payment_method === "CASH")
   );
 }
+
+/**
+ * Pix do site ainda não pago, em pedido dentro do motel: o hóspede pode acabar
+ * pagando na maquininha (cartão ou Pix avulso), e a equipe confirma por aqui.
+ */
+function isUnpaidPixAtMotel(order: Order): boolean {
+  return (
+    order.status === "PENDING" &&
+    order.payment_method === "PIX" &&
+    order.delivery_method !== "HOME_DELIVERY"
+  );
+}
+
+type SettleMethod = "CARD" | "CASH" | "PIX";
+
+const SETTLE_COPY: Record<SettleMethod, { how: string; toast: string }> = {
+  CARD: { how: "no cartão", toast: "Pago no cartão — pedido finalizado" },
+  CASH: { how: "em dinheiro", toast: "Pago em dinheiro — pedido finalizado" },
+  PIX: {
+    how: "no Pix (maquininha)",
+    toast: "Pago no Pix — pedido finalizado",
+  },
+};
 
 /**
  * Pedido que a equipe precisa atender agora: Pix que acabou de ser pago
@@ -180,7 +226,8 @@ const statusConfig: Record<
 type ConfirmAction =
   | { kind: "status"; orderId: string; newStatus: OrderStatus }
   | { kind: "delete"; orderId: string }
-  | { kind: "settle"; orderId: string; method: "CARD" | "CASH" };
+  | { kind: "settle"; orderId: string; method: SettleMethod }
+  | { kind: "refund"; orderId: string; restock: boolean };
 
 // "A cobrar" não é um status do banco: são os PENDING com pagamento presencial.
 type OrderFilter = OrderStatus | "ALL" | "TO_COLLECT";
@@ -188,11 +235,13 @@ type OrderFilter = OrderStatus | "ALL" | "TO_COLLECT";
 interface OrdersDashboardProps {
   initialOrders: Order[];
   isAdmin: boolean;
+  pointEnabled: boolean;
 }
 
 export function OrdersDashboard({
   initialOrders,
   isAdmin,
+  pointEnabled,
 }: OrdersDashboardProps) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [pickupCodeInput, setPickupCodeInput] = useState("");
@@ -202,6 +251,16 @@ export function OrdersDashboard({
   const [newOrderAlert, setNewOrderAlert] = useState(false);
   const [filter, setFilter] = useState<OrderFilter>("ALL");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  // Pedidos com cobrança aberta na maquininha (consultados até fechar).
+  const [pointCharging, setPointCharging] = useState<Set<string>>(new Set());
+  const pointPollsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(
+    new Map(),
+  );
+
+  useEffect(() => {
+    const polls = pointPollsRef.current;
+    return () => polls.forEach((timer) => clearInterval(timer));
+  }, []);
 
   const [soundBlocked, setSoundBlocked] = useState(false);
   const ordersRef = useRef(orders);
@@ -387,8 +446,85 @@ export function OrdersDashboard({
     }
   };
 
-  const handleSettle = async (orderId: string, method: "CARD" | "CASH") => {
+  const stopPointPoll = (orderId: string) => {
+    const timer = pointPollsRef.current.get(orderId);
+    if (timer) clearInterval(timer);
+    pointPollsRef.current.delete(orderId);
+    setPointCharging((prev) => {
+      const next = new Set(prev);
+      next.delete(orderId);
+      return next;
+    });
+  };
+
+  // Manda a cobrança para a maquininha e consulta até o cliente pagar. O
+  // realtime também traz a mudança quando o webhook fecha o pedido.
+  const handleChargeOnPoint = async (orderId: string) => {
     setLoading(orderId, true);
+    const result = await startPointPayment({ orderId });
+    setLoading(orderId, false);
+    if (!result.ok) {
+      toast.error("Não foi possível cobrar na maquininha", {
+        description: result.error,
+      });
+      return;
+    }
+    if (result.state === "paid") {
+      toast.success("Pagamento já tinha entrado na maquininha");
+      return;
+    }
+    toast.success("Cobrança enviada para a maquininha", {
+      description: "Peça ao cliente para pagar com cartão ou Pix na Point.",
+    });
+
+    stopPointPoll(orderId);
+    setPointCharging((prev) => new Set(prev).add(orderId));
+    const startedAt = Date.now();
+    const timer = setInterval(async () => {
+      // A cobrança expira em 10 min no Mercado Pago.
+      if (Date.now() - startedAt > 11 * 60_000) {
+        stopPointPoll(orderId);
+        return;
+      }
+      const check = await checkPointPayment({ orderId });
+      if (!check.ok) return;
+      if (check.state === "paid") {
+        stopPointPoll(orderId);
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  status: (check.orderStatus as OrderStatus) ?? o.status,
+                  payment_method: check.paymentMethod ?? o.payment_method,
+                }
+              : o,
+          ),
+        );
+        toast.success(
+          check.paymentMethod === "PIX"
+            ? "Pago no Pix pela maquininha — pedido finalizado"
+            : "Pago no cartão pela maquininha — pedido finalizado",
+        );
+      } else if (
+        check.state !== "waiting" &&
+        check.state !== "action_required"
+      ) {
+        stopPointPoll(orderId);
+        toast.error("A cobrança na maquininha não foi paga", {
+          description:
+            check.state === "failed"
+              ? "Pagamento recusado. Tente de novo ou receba de outro jeito."
+              : "Cobrança cancelada ou expirada. Envie de novo se precisar.",
+        });
+      }
+    }, 3000);
+    pointPollsRef.current.set(orderId, timer);
+  };
+
+  const handleSettle = async (orderId: string, method: SettleMethod) => {
+    setLoading(orderId, true);
+    stopPointPoll(orderId);
     const result = await confirmInPersonPayment({
       orderId,
       method,
@@ -413,11 +549,30 @@ export function OrdersDashboard({
             : o,
         ),
       );
-      toast.success(
-        method === "CARD"
-          ? "Pago no cartão — pedido finalizado"
-          : "Pago em dinheiro — pedido finalizado",
+      toast.success(SETTLE_COPY[method].toast);
+    }
+    setLoading(orderId, false);
+  };
+
+  const handleRefund = async (orderId: string, restock: boolean) => {
+    setLoading(orderId, true);
+    const result = await refundOrder({ id: orderId, restock });
+    if (!result.ok) {
+      toast.error("Estorno não concluído", { description: result.error });
+    } else {
+      const now = new Date().toISOString();
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? { ...o, status: "CANCELLED", updated_at: now }
+            : o,
+        ),
       );
+      toast.success("Estorno feito no Mercado Pago", {
+        description: result.restocked
+          ? "Pedido cancelado e itens devolvidos ao estoque."
+          : "Pedido cancelado. O estoque não foi alterado.",
+      });
     }
     setLoading(orderId, false);
   };
@@ -437,6 +592,8 @@ export function OrdersDashboard({
       await handleDelete(action.orderId);
     } else if (action.kind === "settle") {
       await handleSettle(action.orderId, action.method);
+    } else if (action.kind === "refund") {
+      await handleRefund(action.orderId, action.restock);
     } else {
       await handleStatusUpdate(action.orderId, action.newStatus);
     }
@@ -451,8 +608,7 @@ export function OrdersDashboard({
 
     if (confirmAction.kind === "settle") {
       const total = order ? formatCents(order.total_cents) : "";
-      const how =
-        confirmAction.method === "CARD" ? "no cartão" : "em dinheiro";
+      const how = SETTLE_COPY[confirmAction.method].how;
       return {
         title: `Recebeu ${total} ${how}?`,
         description: `O pedido de ${who} será marcado como pago ${how} e finalizado, e o estoque dos produtos será baixado.`,
@@ -461,10 +617,20 @@ export function OrdersDashboard({
       };
     }
 
+    if (confirmAction.kind === "refund") {
+      const total = order ? formatCents(order.total_cents) : "";
+      return {
+        title: `Estornar ${total}?`,
+        description: `O valor volta inteiro para ${who} pelo Mercado Pago (Pix ou cartão, como foi pago) e o pedido é cancelado. Não dá para desfazer.`,
+        confirmLabel: "Estornar",
+        destructive: true,
+      };
+    }
+
     if (confirmAction.kind === "delete") {
       return {
         title: "Excluir pedido?",
-        description: `O pedido de ${who} será removido permanentemente do sistema. Esta ação não pode ser desfeita e não estorna o pagamento — faça o reembolso no painel do Mercado Pago, se necessário.`,
+        description: `O pedido de ${who} será removido permanentemente do sistema. Esta ação não pode ser desfeita e não estorna o pagamento — use “Estornar” antes, se for o caso.`,
         confirmLabel: "Excluir pedido",
         destructive: true,
       };
@@ -486,7 +652,7 @@ export function OrdersDashboard({
     if (confirmAction.newStatus === "CANCELLED") {
       return {
         title: "Cancelar pedido?",
-        description: `O pedido de ${who} será marcado como Cancelado. Atenção: isto NÃO estorna o pagamento no Mercado Pago nem devolve o estoque — faça o reembolso manualmente, se for o caso.`,
+        description: `O pedido de ${who} será marcado como Cancelado. Atenção: isto NÃO estorna o pagamento nem devolve o estoque.${order && isRefundable(order) ? " Para devolver o dinheiro, use “Estornar”." : ""}`,
         confirmLabel: "Cancelar pedido",
         destructive: true,
       };
@@ -727,6 +893,66 @@ export function OrdersDashboard({
                   totalCents={order.total_cents}
                 />
 
+                {/* Cobrar na maquininha integrada: confirma sozinho */}
+                {pointEnabled &&
+                  (awaitingInPerson || isUnpaidPixAtMotel(order)) && (
+                    <Button
+                      size="sm"
+                      disabled={isLoading || pointCharging.has(order.id)}
+                      onClick={() => handleChargeOnPoint(order.id)}
+                      className="text-xs"
+                    >
+                      {pointCharging.has(order.id) ? (
+                        <Loader2 className="mr-1 size-3 animate-spin" />
+                      ) : (
+                        <Smartphone className="mr-1 size-3" />
+                      )}
+                      {pointCharging.has(order.id)
+                        ? "Aguardando na maquininha"
+                        : isLoading
+                          ? "..."
+                          : "Cobrar na maquininha"}
+                    </Button>
+                  )}
+
+                {/* Pix do site pago por fora (maquininha avulsa ou cartão) */}
+                {isUnpaidPixAtMotel(order) && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        setConfirmAction({
+                          kind: "settle",
+                          orderId: order.id,
+                          method: "PIX",
+                        })
+                      }
+                      className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                    >
+                      <QrCode className="mr-1 size-3" />
+                      {isLoading ? "..." : "Recebi Pix na maquininha"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        setConfirmAction({
+                          kind: "settle",
+                          orderId: order.id,
+                          method: "CARD",
+                        })
+                      }
+                      className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                    >
+                      <CreditCard className="mr-1 size-3" />
+                      {isLoading ? "..." : "Recebi no cartão"}
+                    </Button>
+                  </>
+                )}
+
                 {/* Pagar na entrega: a equipe cobra e entrega no mesmo momento */}
                 {awaitingInPerson && (
                   <>
@@ -761,6 +987,22 @@ export function OrdersDashboard({
                     >
                       <Banknote className="mr-1 size-3" />
                       {isLoading ? "..." : "Recebi em dinheiro"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        setConfirmAction({
+                          kind: "settle",
+                          orderId: order.id,
+                          method: "PIX",
+                        })
+                      }
+                      className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                    >
+                      <QrCode className="mr-1 size-3" />
+                      {isLoading ? "..." : "Recebi no Pix"}
                     </Button>
                   </>
                 )}
@@ -859,6 +1101,26 @@ export function OrdersDashboard({
                   </Button>
                 )}
 
+                {isAdmin && isRefundable(order) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isLoading}
+                    onClick={() =>
+                      setConfirmAction({
+                        kind: "refund",
+                        orderId: order.id,
+                        // Entregue: o produto provavelmente não voltou.
+                        restock: order.status !== "COMPLETED",
+                      })
+                    }
+                    className="text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    <Undo2 className="mr-1 size-3" />
+                    Estornar
+                  </Button>
+                )}
+
                 {isAdmin && (
                   <Button
                     size="sm"
@@ -902,6 +1164,26 @@ export function OrdersDashboard({
                   {confirmCopy.description}
                 </AlertDialogDescription>
               </AlertDialogHeader>
+              {confirmAction?.kind === "refund" && (
+                <label className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm">
+                  <Checkbox
+                    checked={confirmAction.restock}
+                    onCheckedChange={(checked) =>
+                      setConfirmAction({
+                        ...confirmAction,
+                        restock: checked === true,
+                      })
+                    }
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Devolver os itens ao estoque
+                    <span className="block text-xs text-muted-foreground">
+                      Marque se o produto voltou ou nem chegou a sair.
+                    </span>
+                  </span>
+                </label>
+              )}
               <AlertDialogFooter>
                 <AlertDialogCancel>Voltar</AlertDialogCancel>
                 <AlertDialogAction

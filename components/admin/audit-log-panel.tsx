@@ -22,6 +22,8 @@ const ACTION_LABELS: Record<string, string> = {
   "order.update": "Editou pedido",
   "order.status_change": "Alterou status do pedido",
   "order.cancel": "Cancelou pedido",
+  "order.refund": "Estornou pedido",
+  "order.point_charge": "Cobrou na maquininha",
   "order.complete": "Finalizou pedido",
   "order.delete": "Excluiu pedido",
   "product.create": "Criou produto",
